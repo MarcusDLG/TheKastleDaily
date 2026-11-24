@@ -47,9 +47,14 @@ PostgreSQL uses:
 Database initialization settings apply to newly initialized
 volumes. Existing volumes must be assessed separately.
 
-The bootstrap database role must not be used as the application
-runtime role. Least-privilege application roles will be created
-before database access is introduced.
+The API connects as `kastle_app` using its own credential.
+The runtime role can read the source registry and update its HTTP cache
+validators. It can write workflow records with the table grants recorded
+in the Alembic revision. Provenance and evidence are append-only for that
+role. It has no delete privileges, database or schema creation privileges,
+or access to the Alembic version table. Provisioning uses a separate
+bootstrap login, and schema updates use a separate migration login.
+See [M02 database operations](M02.md).
 
 ## 3. Software supply chain
 
