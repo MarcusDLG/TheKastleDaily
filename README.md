@@ -81,6 +81,7 @@ Run the disposable PostgreSQL integration checks with
 - [M02 plan and database runbook](docs/M02.md)
 - [RSS ingestion pilot](docs/RSS_INGESTION.md)
 - [Editorial selection](docs/EDITORIAL_SELECTION.md)
+- [EPUB edition build](docs/EPUB_EDITION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security](docs/SECURITY.md)
 - [External integrations](docs/INTEGRATIONS.md)

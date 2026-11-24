@@ -1,0 +1,21 @@
+{
+  "stories": [
+    {
+      "article_id": "fixture-maker",
+      "headline": "A workshop builds a switch box",
+      "paragraphs": [
+        "A fictional workshop built a compact switch box to organize the controls at its test bench.",
+        "The fictional build used labeled switches so the reader could identify each circuit before making changes."
+      ],
+      "sources": [{"url": "https://example.invalid/project-notes", "label": "Fixture notes"}]
+    },
+    {
+      "article_id": "fixture-oval",
+      "headline": "A fictional oval opens for testing",
+      "paragraphs": [
+        "The fictional test session gave teams a chance to compare tires on a resurfaced oval.",
+        "This second paragraph verifies that the full story body appears in the offline edition."
+      ]
+    }
+  ]
+}
