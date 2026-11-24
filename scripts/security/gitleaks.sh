@@ -92,6 +92,7 @@ scan() {
   shift 3
 
   docker run --rm \
+    --user "$(id -u):$(id -g)" \
     --network none \
     --read-only \
     --tmpfs /tmp:rw,noexec,nosuid,size=64m \
