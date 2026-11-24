@@ -902,7 +902,8 @@ pyyaml==6.0.4 \
     --hash=sha256:f5c410f9e2ffc9286279a46f2e8c107edaf3b1123510af59c828a9c15b23c9db \
     --hash=sha256:f617e4e5c619fef5284335b24e3af3a77ce08dc5c389ff4b25033bb2749032b7
     # via
-    #   -r requirements-dev.in
+    #   -c requirements.txt
+    #   -r requirements.in
     #   bandit
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
