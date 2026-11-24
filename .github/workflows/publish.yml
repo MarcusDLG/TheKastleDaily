@@ -1,26 +1,131 @@
 name: Publish approved image
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Scan repository for credentials
+        run: bash scripts/security/gitleaks.sh
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install locked dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/kastle-venv"
+          source "$RUNNER_TEMP/kastle-venv/bin/activate"
+          python -m pip install \
+            --require-hashes \
+            --only-binary=:all: \
+            -r requirements-dev.txt
+          python -m pip check
+          echo "$RUNNER_TEMP/kastle-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Lint
+        run: ruff check .
+
+
+      - name: Scan Python application security
+        run: |
+          mkdir -p artifacts/security
+          bandit -r app --ignore-nosec -f json \
+            -o artifacts/security/bandit.json
+
+      - name: Regression tests
+        run: python -m pytest --junitxml=artifacts/junit.xml
+
+      - name: Audit production dependencies
+        run: pip-audit --require-hashes -r requirements.txt
+
+      - name: Audit development dependencies
+        run: pip-audit --require-hashes -r requirements-dev.txt
+
+      - name: Validate Docker Compose
+        run: POSTGRES_PASSWORD=ci-only-placeholder docker compose config --quiet
+
+      - name: Validate AMD64 production build
+        run: docker build --platform linux/amd64 -t kastle-daily:validation .
+
+      - name: Scan container vulnerabilities
+        run: bash scripts/security/trivy.sh kastle-daily:validation
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-security-results
+          path: artifacts/
+          retention-days: 14
+
   publish:
+    needs: validate
     if: github.ref == 'refs/heads/main'
     environment: approved-release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements-dev.txt && ruff check . && python -m pytest && pip-audit -r requirements.txt
-      - name: Build and push commit tag
+
+      - name: Install locked dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/kastle-venv"
+          source "$RUNNER_TEMP/kastle-venv/bin/activate"
+          python -m pip install \
+            --require-hashes \
+            --only-binary=:all: \
+            -r requirements-dev.txt
+          python -m pip check
+          echo "$RUNNER_TEMP/kastle-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build and scan release image
+        run: |
+          set -eu
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}"
+          docker build --platform linux/amd64 -t "$image" .
+          bash scripts/security/trivy.sh "$image"
+
+      - name: Push scanned commit tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}"
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker build --platform linux/amd64 -t "$image" .
+          trap 'docker logout ghcr.io' EXIT
           docker push "$image"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: published-image-security-results
+          path: artifacts/
+          retention-days: 14
