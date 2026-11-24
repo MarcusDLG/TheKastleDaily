@@ -1,7 +1,7 @@
 # Quality gates
 M00 regression: health contract, disabled admin/docs endpoints, exact editorial configuration and static network isolation. Run `python -m pytest`. CI lints, audits dependencies, validates Compose and builds amd64 image. Remote CI runs #9 and #10 passed.
 
-Future gates: fresh PostgreSQL migrations and upgrades, source timeout/malformed payload/duplicate/quota tests, attribution and injection resistance, ranking distribution, DST and concurrent-run idempotency, EPUB validation and Kindle receipt, SMTP uncertainty, authentication/authorization and CSRF, MCP scopes, backup restoration and NAS performance. Use fixtures and mocks, never production secrets in PR CI. Record results in PROJECT_STATUS. No merge without explicit approval.
+Future gates: source timeout/malformed payload/duplicate/quota tests, attribution and injection resistance, ranking distribution, DST and concurrent-run idempotency, EPUB validation and Kindle receipt, SMTP uncertainty, authentication/authorization and CSRF, MCP scopes, backup restoration and NAS performance. Use fixtures and mocks, never production secrets in PR CI. Record results in PROJECT_STATUS. No merge without explicit approval.
 
 ## M00 acceptance evidence
 
@@ -64,3 +64,14 @@ acceptance.
 
 Successful SMTP submission does not replace Kindle
 delivery acceptance.
+
+
+## M02 PostgreSQL acceptance
+
+Run `bash scripts/database/acceptance.sh` with local Docker. It builds the
+application and starts a new PostgreSQL 17 volume with disposable
+credentials. It tests repeated provisioning and upgrades, downgrade to
+base and re-upgrade, migration/model drift, API readiness, the model
+workflow, duplicate and invalid records, and runtime permission boundaries.
+The script removes its dedicated containers and volume when it exits.
+CI and release validation run the same check alongside the M00 gates.

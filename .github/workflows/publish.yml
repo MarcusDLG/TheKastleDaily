@@ -59,6 +59,9 @@ jobs:
       - name: Audit development dependencies
         run: pip-audit --require-hashes -r requirements-dev.txt
 
+      - name: PostgreSQL integration and migration regression
+        run: bash scripts/database/acceptance.sh
+
       - name: Validate Docker Compose
         run: POSTGRES_PASSWORD=ci-only-placeholder docker compose config --quiet
 
