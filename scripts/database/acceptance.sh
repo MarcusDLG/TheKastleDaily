@@ -32,6 +32,7 @@ api=$("${compose[@]}" run -d --no-deps api)
 docker exec -i "$api" python - 503 < scripts/database/check_readiness.py
 "${compose[@]}" run --rm -T migrate
 "${compose[@]}" run --rm -T migrate alembic check
+"${compose[@]}" run --rm -T ingest
 "${compose[@]}" exec -T db sh -ec '
     export PGPASSWORD="$POSTGRES_PASSWORD"
     psql -X -w -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1
@@ -41,3 +42,15 @@ VALUES ('rss', 'https://example.invalid/feed', 'Fixture', 'formula_1', 'Test onl
 SQL
 docker exec -i "$api" python - 200 < scripts/database/check_readiness.py
 docker exec -i "$api" python - < scripts/database/check_persistence.py
+"${compose[@]}" exec -T db sh -ec '
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+    psql -X -w -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1
+' <<'SQL'
+INSERT INTO newspaper.sources (kind, endpoint, publisher, category, licensing_note, approval)
+VALUES
+    ('rss', 'https://example.invalid/second-feed', 'Second', 'nascar', 'Test only', 'approved'),
+    ('rss', 'https://example.invalid/bad-feed', 'Bad', 'nascar', 'Test only', 'approved'),
+    ('rss', 'https://example.invalid/pending', 'Pending', 'nascar', 'Test only', 'pending'),
+    ('youtube', 'https://example.invalid/channel', 'Video', 'nascar', 'Test only', 'approved');
+SQL
+docker exec -i "$api" python - < scripts/database/check_ingestion.py
