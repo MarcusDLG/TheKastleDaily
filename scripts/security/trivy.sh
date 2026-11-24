@@ -38,6 +38,7 @@ docker pull "$TRIVY"
 echo "=== UPDATE TRIVY DATABASE ==="
 
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   --read-only \
   --tmpfs /tmp:rw,nosuid,size=512m \
   --cap-drop ALL \
@@ -67,6 +68,7 @@ scan() {
     "$IMAGE" || return 1
 
   docker run --rm \
+    --user "$(id -u):$(id -g)" \
     --network none \
     --read-only \
     --tmpfs /tmp:rw,nosuid,size=512m \
