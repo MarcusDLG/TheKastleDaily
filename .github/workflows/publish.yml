@@ -1,0 +1,26 @@
+name: Publish approved image
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    environment: approved-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt && ruff check . && python -m pytest && pip-audit -r requirements.txt
+      - name: Build and push commit tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker build --platform linux/amd64 -t "$image" .
+          docker push "$image"

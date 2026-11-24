@@ -1,0 +1,6 @@
+# Architecture
+Target Synology DS220+, J4025, 18 GB RAM, Docker, Homebridge and Channels DVR. Linux amd64; verify DSM and Compose versions. Python 3.12/FastAPI, PostgreSQL 17, Alembic planned, GitHub Actions and GHCR. No shared MuralBook database or credentials. Borrow clean migrations, secret-free CI, regression artifacts and concurrency cancellation.
+
+Pipeline: approved sources -> normalization/deduplication -> evidence-backed ranking -> edition generation -> EPUB validation -> delivery outbox -> SMTP -> Kindle. Store run IDs, provenance, UTC timestamps, edition local date, delivery attempts and checksums. Unique edition/outbox keys; ambiguous SMTP acceptance requires review. Single worker, bounded retries and daily cost caps. America/New_York DST-safe edition key. DB 1 GiB/0.5 CPU, API 512 MiB/0.25 CPU, future worker 1 GiB/0.75 CPU. Benchmark with DVR active. No local LLM. Backups separate. Production consumes approved GHCR digest; no automatic deploy.
+
+Dashboard: authenticated run status, sources, weights, previews, logs, retry, cost and delivery history. MCP: read-only status first, later scoped writes requiring confirmation; shared service layer, no unrestricted SQL or shell. Evaluate secure tunnel before public reverse proxy. No admin endpoints in M00.
