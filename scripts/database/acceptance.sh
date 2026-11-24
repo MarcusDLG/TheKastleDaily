@@ -54,3 +54,5 @@ VALUES
     ('youtube', 'https://example.invalid/channel', 'Video', 'nascar', 'Test only', 'approved');
 SQL
 docker exec -i "$api" python - < scripts/database/check_ingestion.py
+"${compose[@]}" run --rm -T migrate python -m app.pilot
+"${compose[@]}" run --rm -T migrate python - < scripts/database/check_pilot.py

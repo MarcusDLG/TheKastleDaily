@@ -9,29 +9,35 @@ The implementation starts from post-M02 main at `d9b8e69`.
 | Persist | Track articles, provenance and run outcomes | Handle repeated fetches without duplicate stories | Save normalized URLs, external IDs, publication times and source references | Duplicate records are avoided and a failed feed leaves other feeds eligible |
 | Verify | Qualify the ingestion path | Keep CI independent of publisher uptime | Run the regression and disposable PostgreSQL checks | Fixtures cover repeated items, conditional responses, malformed XML and source failure isolation |
 
-## Pilot registry candidates
+## Personal pilot registry
 
 | Publisher | Category | Feed | Disposition |
 | --- | --- | --- | --- |
-| RaceFans | Formula 1 | https://www.racefans.net/feed/ | Candidate for link discovery. Publisher directs article reuse requests to its contact form. |
-| MacRumors | Technology and AI | https://feeds.macrumors.com/MacRumors-All | Candidate for link discovery. Publisher help recommends RSS for finding stories. |
-| ESPN NASCAR | NASCAR | https://www.espn.com/espn/rss/nascar/news | Working feed. Automated private-digest use remains subject to feed terms review. |
-| The Race | Formula 1 | https://www.the-race.com/rss/ | Backup. Check rights before any use beyond link discovery. |
-| 9to5Mac | Technology and AI | https://9to5mac.com/feed/ | Backup. Check rights before any use beyond link discovery. |
+| Yahoo Sports NASCAR | NASCAR | https://sports.yahoo.com/nascar/rss/ | Attributed headline and link discovery. Yahoo aggregates coverage from multiple outlets. |
+| RaceFans | Formula 1 | https://www.racefans.net/feed/ | Open-wheel coverage and publisher attribution. |
+| MacRumors | Technology and AI | https://feeds.macrumors.com/MacRumors-All | Apple coverage and publisher attribution. |
+| Ars Technica | Technology and AI | https://arstechnica.com/feed/ | Broader technology coverage from the supplied Tech OPML, using the publisher's direct HTTPS feed. |
 
-The runtime ingests approved registry entries only. This change does not
-activate publisher rows by default. RSS ingestion stores headline, link,
+The runtime ingests approved registry entries only. The registration command explicitly opts the local database into the pilot.
+It leaves any existing registry row and approval decision intact. RSS ingestion stores headline, link,
 publication timestamp when available, source identifier and publisher
 attribution. It does not retrieve article pages, store descriptions or
 images, send data to a model, or deliver a digest.
 
 ## Run locally
 
-Complete the [M02 database startup](M02.md), then rebuild with
-`docker compose build api`. As the schema owner, register the feed and its
-licensing disposition in `newspaper.sources`. Set `approval` to `approved`
-after review. Use the final HTTPS feed URL because redirects are rejected.
-Run one pass with `docker compose run --rm ingest`. The command reports
+Complete the [M02 database startup](M02.md), then run:
+
+```sh
+docker compose build api
+docker compose run --rm migrate python -m app.pilot
+docker compose run --rm ingest
+```
+
+The registration command uses the schema owner's credentials. Run it
+again to add any missing pilot sources. Use the final HTTPS feed URL
+when registering other sources because the importer rejects redirects.
+The ingestion command reports
 source IDs and outcomes and exits nonzero if a feed failed. Inspect the
 `newspaper.ingestion_runs` records for failure codes. A subsequent pass
 can retry failed sources without duplicating successful items.
