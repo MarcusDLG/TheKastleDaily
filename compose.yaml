@@ -1,11 +1,24 @@
 name: kastle-daily
+x-app-image: &app-image
+  build: .
+  image: ${KASTLE_APP_IMAGE:-kastle-daily:dev}
+x-app-hardening: &app-hardening
+  mem_limit: 512m
+  cpus: 0.25
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
 services:
   api:
-    build: .
-    image: kastle-daily:dev
+    <<: *app-image
     ports:
       - "127.0.0.1:8765:8000"
-    networks: [frontend]
+    networks: [frontend, database]
+    environment:
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
     mem_limit: 512m
     cpus: 0.25
     read_only: true
@@ -13,12 +26,12 @@ services:
     security_opt: [no-new-privileges:true]
     restart: unless-stopped
     healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
   db:
-    image: postgres:17@sha256:87c8b42f423b45d5247e6aa8fdb2e7762fec164c68a50fe3eb07e7bfcaf4dbcf
+    image: &postgres-image postgres:17@sha256:87c8b42f423b45d5247e6aa8fdb2e7762fec164c68a50fe3eb07e7bfcaf4dbcf
     environment:
       POSTGRES_DB: kastle_daily
       POSTGRES_USER: kastle_bootstrap
@@ -38,6 +51,36 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+  provision:
+    image: *postgres-image
+    profiles: [database-tools]
+    entrypoint: [sh, /provision.sh]
+    networks: [database]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "10001"
+    mem_limit: 128m
+    cpus: 0.25
+    volumes:
+      - ./scripts/database/provision.sh:/provision.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a strong database password}
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:-}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
+  migrate:
+    <<: [*app-image, *app-hardening]
+    profiles: [database-tools]
+    command: [alembic, upgrade, head]
+    networks: [database]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:-}
 networks:
   frontend: {}
   database:

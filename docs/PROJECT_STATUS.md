@@ -4,10 +4,9 @@
 
 Assessment date: 2026-11-24.
 
-Status: Implementation complete; final PR acceptance pending.
+Status: Accepted and squash merged through PR #1 at b0acc98.
 
 Repository: MarcusDLG/TheKastleDaily
-Branch: m00/project-initialization
 Pull request: #1
 
 ## Initialization workstreams
@@ -19,7 +18,7 @@ Pull request: #1
 | M00-B Synology readiness | Passed with conditions |
 | M00-C EPUB proof of concept | Physical-device acceptance passed |
 | M00-D External integration feasibility | Feasibility assessment complete |
-| Consolidated M00 acceptance | Pending final PR review |
+| Consolidated M00 acceptance | Accepted and squash merged |
 
 ## M00-A Security hardening
 
@@ -118,8 +117,8 @@ Additional security findings are maintained in SECURITY.md.
 
 | Workstream | Status |
 |---|---|
-| M00 initialization and feasibility | Final acceptance pending |
-| M02 persistence and migrations | Next planned implementation |
+| M00 initialization and feasibility | Accepted |
+| M02 persistence and migrations | See the [M02 plan and verification status](M02.md) |
 | Source ingestion | Planned |
 | Editorial engine | Planned |
 | EPUB generation and delivery | Planned |
