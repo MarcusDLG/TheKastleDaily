@@ -4,8 +4,8 @@
 
 - Milestone: M00-A
 - Assessment date: 2026-11-24
-- Status: Local security acceptance passed
-- Remote CI acceptance: Pending
+- Status: Local and remote CI security acceptance passed
+- Remote CI acceptance: Passed (CI #9 and #10)
 - Production deployment: Not authorized
 
 ## 1. Security principles
@@ -264,7 +264,7 @@ Results are time-dependent and must be reassessed by subsequent scans.
 | M00-REL-001 | Database checksums disabled | Remediated for fresh volumes |
 | M00-SEC-002 | Vulnerable development dependency | Remediated |
 | M00-SEC-003 | AWS synthetic credential detection discrepancy | Open; review deferred recommendation |
-| M00-SEC-004 | Scanner configuration bypass | Local mitigation validated; CI pending |
+| M00-SEC-004 | Scanner configuration bypass | Local mitigation and remote CI execution validated |
 | M00-SEC-005 | Application high findings without fixes | Monitor |
 | M00-SEC-006 | PostgreSQL OS vulnerabilities | Temporary exception and monitoring |
 | M00-SEC-007 | Embedded gosu vulnerabilities | Temporary exception |
@@ -299,8 +299,7 @@ Backup and restore remediation remains a tracked post-MVP task.
 
 ## 12. Acceptance limitations
 
-Local scanner and policy acceptance does not establish successful
-execution in GitHub Actions.
+Local and remote CI acceptance have both been demonstrated.
 
 Publisher cryptographic attestations have not been independently
 verified.
@@ -312,9 +311,44 @@ Existing database volumes have not been retroactively hardened.
 
 The synthetic AWS credential discrepancy remains unresolved.
 
-The integrated scanner scripts require remote CI verification.
+The integrated scanner scripts passed remote CI verification.
 The release workflow and GHCR access require a separately
 authorized publication exercise.
 
 No production image has been published or deployed as part of
 this assessment.
+
+
+## 13. Remote CI acceptance
+
+Acceptance date: 2026-11-24.
+
+Validated implementation commit: 21698b2.
+
+| Workflow | Result | Duration |
+|---|---|---|
+| CI #9 - Feature branch push | Passed | 1m 26s |
+| CI #10 - Pull request synchronization | Passed | 1m 29s |
+
+### Remote execution defects
+
+| ID | Description | Disposition |
+|---|---|---|
+| M00-QA-004 | Gitleaks report directory permissions | Resolved |
+| M00-QA-005 | Trivy vulnerability database cache permissions | Resolved |
+
+Both defects were corrected by aligning scanner container runtime
+UID and GID with the executing host user.
+
+No security thresholds were relaxed.
+
+### Acceptance disposition
+
+M00-A security implementation and CI acceptance are complete.
+
+Previously documented residual risks and approved temporary
+exceptions remain applicable.
+
+The publication workflow and GHCR access remain unverified.
+Production deployment and merge authorization remain separate
+project decisions.
