@@ -17,6 +17,8 @@ The implementation starts from post-M02 main at `d9b8e69`.
 | RaceFans | Formula 1 | https://www.racefans.net/feed/ | Open-wheel coverage and publisher attribution. |
 | MacRumors | Technology and AI | https://feeds.macrumors.com/MacRumors-All | Apple coverage and publisher attribution. |
 | Ars Technica | Technology and AI | https://arstechnica.com/feed/ | Broader technology coverage from the supplied Tech OPML, using the publisher's direct HTTPS feed. |
+| iRacing | Sim Racing | https://www.iracing.com/feed/ | Sim racing updates and events. |
+| Raspberry Pi | Maker and Radio | https://www.raspberrypi.com/news/feed/ | Maker and hardware project coverage. |
 
 The runtime ingests approved registry entries only. The registration command explicitly opts the local database into the pilot.
 It leaves any existing registry row and approval decision intact. RSS ingestion stores headline, link,

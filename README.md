@@ -80,6 +80,7 @@ Run the disposable PostgreSQL integration checks with
 - [Project status](docs/PROJECT_STATUS.md)
 - [M02 plan and database runbook](docs/M02.md)
 - [RSS ingestion pilot](docs/RSS_INGESTION.md)
+- [Editorial selection](docs/EDITORIAL_SELECTION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security](docs/SECURITY.md)
 - [External integrations](docs/INTEGRATIONS.md)

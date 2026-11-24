@@ -30,6 +30,18 @@ PILOT_SOURCES = (
         "technology_ai",
         "Personal feed discovery via the public publisher feed with attribution.",
     ),
+    (
+        "iRacing",
+        "https://www.iracing.com/feed/",
+        "sim_racing",
+        "Personal feed discovery for sim racing, with publisher attribution.",
+    ),
+    (
+        "Raspberry Pi",
+        "https://www.raspberrypi.com/news/feed/",
+        "maker_radio",
+        "Personal feed discovery for maker projects, with publisher attribution.",
+    ),
 )
 
 

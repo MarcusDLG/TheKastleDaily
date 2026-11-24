@@ -16,6 +16,7 @@ RUN python -m pip install \
     && useradd --system --uid 10001 appuser
 
 COPY app ./app
+COPY config/editorial.yaml ./config/editorial.yaml
 COPY alembic.ini .
 COPY migrations ./migrations
 
