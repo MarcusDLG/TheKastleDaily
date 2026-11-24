@@ -81,6 +81,16 @@ services:
         condition: service_healthy
     environment:
       MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:-}
+  ingest:
+    <<: [*app-image, *app-hardening]
+    profiles: [ingestion-tools]
+    command: [python, -m, app.ingest]
+    networks: [frontend, database]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
 networks:
   frontend: {}
   database:
