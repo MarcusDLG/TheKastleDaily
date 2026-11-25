@@ -27,10 +27,13 @@ from app.drafting import DraftOutput
 ENDPOINT = "api.openai.com"
 PATH = "/v1/chat/completions"
 TIMEOUT = 30
-MAX_COMPLETION_TOKENS = 1200
+MAX_COMPLETION_TOKENS = 8000
 DEGRADE_AFTER_FAILURES = 2
 
 DEFAULT_MODEL = "gpt-5-mini"
+# gpt-5-mini spends completion tokens on reasoning before content; low
+# effort is plenty for summarization and keeps the budget for output.
+DEFAULT_REASONING_EFFORT = "low"
 DEFAULT_MAX_COST_USD = Decimal("0.50")
 
 # Estimated USD per million tokens (input, output). Override via
@@ -55,6 +58,11 @@ Produce original synthesis, not a copy of the excerpt:
   in the evidence — no invented facts, dates, names or numbers;
 - sources: the URLs the claims trace to, each with a short label. Every
   url must come from observed_urls."""
+
+REPAIR_PROMPT = (
+    "Your previous reply was not valid JSON. Reply with only a JSON "
+    "object containing headline, paragraphs and sources."
+)
 
 
 def _output_schema() -> dict:
@@ -137,12 +145,14 @@ class OpenAIGenerator:
         transport: Callable = post_chat_completion,
         max_cost_usd: Decimal = DEFAULT_MAX_COST_USD,
         pricing: tuple[Decimal, Decimal] | None = None,
+        reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     ):
         self.api_key = api_key
         self.model = model
         self.name = f"openai/{model}"
         self._transport = transport
         self.max_cost_usd = max_cost_usd
+        self.reasoning_effort = reasoning_effort
         self.pricing = pricing or PRICING.get(model, (Decimal("0"), Decimal("0")))
         self.input_tokens = 0
         self.output_tokens = 0
@@ -168,9 +178,13 @@ class OpenAIGenerator:
                 os.environ.get("OPENAI_MAX_COST_USD") or DEFAULT_MAX_COST_USD
             ),
             pricing=pricing,
+            reasoning_effort=(
+                os.environ.get("OPENAI_REASONING_EFFORT", "").strip()
+                or DEFAULT_REASONING_EFFORT
+            ),
         )
 
-    def _payload(self, story: dict, evidence_text: str) -> dict:
+    def _messages(self, story: dict, evidence_text: str) -> list:
         observed = story.get("observed_urls") or [story["url"]]
         brief = {
             "title": story["title"],
@@ -180,14 +194,18 @@ class OpenAIGenerator:
             "observed_urls": observed,
             "evidence": evidence_text,
         }
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(brief)},
+        ]
+
+    def _payload(self, messages: list) -> dict:
         return {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(brief)},
-            ],
+            "messages": messages,
             "response_format": _output_schema(),
             "max_completion_tokens": MAX_COMPLETION_TOKENS,
+            "reasoning_effort": self.reasoning_effort,
         }
 
     def _bill(self, usage: dict) -> None:
@@ -201,11 +219,10 @@ class OpenAIGenerator:
             + Decimal(output_tokens) * output_rate
         ) / Decimal(1_000_000)
 
-    def generate(self, story: dict, evidence_text: str) -> DraftOutput | None:
-        if self._degraded or self.estimated_cost_usd >= self.max_cost_usd:
-            return None
+    def _request(self, messages: list) -> dict | None:
+        """POST one completion; transport failures count toward degrade."""
         try:
-            response = self._transport(self._payload(story, evidence_text), self.api_key)
+            response = self._transport(self._payload(messages), self.api_key)
         except ProviderError:
             self._failures += 1
             if self._failures >= DEGRADE_AFTER_FAILURES:
@@ -213,16 +230,34 @@ class OpenAIGenerator:
             return None
         self._failures = 0
         self._bill(response.get("usage") or {})
-        try:
-            content = response["choices"][0]["message"]["content"]
-            draft = json.loads(content)
-            return DraftOutput(
-                headline=str(draft["headline"]),
-                paragraphs=tuple(str(p) for p in draft["paragraphs"]),
-                sources=tuple(dict(s) for s in draft["sources"]),
-            )
-        except (KeyError, IndexError, TypeError, ValueError) as error:
-            raise ValueError("Model output violated the draft schema") from error
+        return response
+
+    def generate(self, story: dict, evidence_text: str) -> DraftOutput | None:
+        if self._degraded or self.estimated_cost_usd >= self.max_cost_usd:
+            return None
+        messages = self._messages(story, evidence_text)
+        for attempt in range(2):
+            response = self._request(messages)
+            if response is None:
+                return None
+            content = ""
+            try:
+                content = response["choices"][0]["message"].get("content") or ""
+                draft = json.loads(content)
+                return DraftOutput(
+                    headline=str(draft["headline"]),
+                    paragraphs=tuple(str(p) for p in draft["paragraphs"]),
+                    sources=tuple(dict(s) for s in draft["sources"]),
+                )
+            except (KeyError, IndexError, TypeError, ValueError):
+                pass  # fall through to the repair attempt
+            if attempt or self.estimated_cost_usd >= self.max_cost_usd:
+                break
+            if content:
+                messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "user", "content": REPAIR_PROMPT})
+        detail = f": {content[:160]!r}" if content else ""
+        raise ValueError(f"Model output violated the draft schema{detail}")
 
 
 def openai_generator():

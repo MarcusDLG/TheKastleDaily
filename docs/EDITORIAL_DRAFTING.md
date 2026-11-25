@@ -63,6 +63,16 @@ transport failures degrade the adapter for the rest of the pass.
 estimates cost. No call is made without a configured key, and tests
 inject the transport.
 
+gpt-5-family models spend completion tokens on reasoning before
+content, so `OPENAI_REASONING_EFFORT` (default `low`, gpt-5-family
+only) bounds that spend and the completion cap leaves headroom for
+both reasoning and output — an undersized cap makes the model return
+empty content. A reply that is not valid JSON gets one repair attempt
+(feeding the bad reply back with a schema reminder) before the story
+is blocked. Blocked stories record a per-story reason on
+`editorial_runs.error_detail` (a capped JSON list) alongside the
+`stories_blocked` error code.
+
 ## Provenance
 
 Every produced story is linked to all of its article's source
