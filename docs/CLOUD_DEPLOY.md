@@ -27,22 +27,46 @@ image: ${KASTLE_APP_IMAGE:-kastle-daily:dev}
 ```
 
 A friend's `.env` sets `KASTLE_APP_IMAGE=ghcr.io/<owner>/kastle-daily:<tag>`.
-Until publication is authorized, the friend path is `git clone` +
-`docker compose build` — works, just slower.
 
-## Compute shapes
+**Decision: GHCR private.** The friend authenticates once
+(`docker login ghcr.io` with a read-only PAT) — five minutes, then
+pulls work forever. Public visibility is a one-click toggle with no
+migration cost if it is ever wanted, and the image carries no secrets
+(everything sensitive arrives via env), so staying private is purely
+a control-posture choice, not a technical one.
+
+Zero-infra fallback: a `docker save` tarball shipped directly — the
+same path that staged the NAS image — needs no registry at all.
+
+## Compute shapes (easiest first)
 
 | Shape | ~Cost/mo | Scheduling | Storage | Fit |
 |---|---|---|---|---|
-| **Lightsail nano VM** | $5 | in-container daemon | instance disk | Simplest: clone + `compose up`, identical to NAS |
-| **ECS Fargate + EventBridge** | ~$0.15 compute | platform cron runs `--once` | EFS `/data` | Cheapest run; most AWS machinery (task def, IAM, EFS, rule) |
-| Fly.io / Railway machine | ~$1–3 | in-container daemon | fly/railway volume | Middle path, deploys from the Dockerfile |
+| **Lightsail nano VM** | $5 | in-container daemon | instance disk | **Easiest** — clone + `compose up`, identical to the NAS runbook |
+| Fly.io / Railway machine | ~$1–3 | in-container daemon | platform volume | Middle path, deploys from the Dockerfile |
+| **ECS Fargate + EventBridge** | ~$0.15 compute | platform cron runs `--once` | EFS `/data` | **Cheapest** run; most AWS machinery (task def, IAM, EFS, rule) |
 | ~~Lambda~~ | — | — | — | Rejected: EFS requires VPC, VPC egress requires NAT (~$30/mo) |
 
 The daemon-versus-cron insight: the loop in `app/schedule.py` is a
 convenience for hosts that lack schedulers. Under EventBridge, a
 systemd timer or a fly.io scheduled machine, `--once` is the whole
 pipeline and the platform owns "daily at 07:00 ET".
+
+Recommended default: **Lightsail** — the friend path is the NAS
+runbook verbatim, and $5/mo buys the simplest possible mental model.
+Fargate is the optimization for a cost-sensitive second deployment,
+not the first.
+
+## Admin surface on a cloud host
+
+The `admin` service binds `127.0.0.1` — correct on a LAN NAS, and on a
+cloud VM it stays reachable without any ingress change:
+
+- **SSH tunnel** (`ssh -L 8080:localhost:8080 friend@host`) — the
+  zero-configuration answer; reuse the SSH access the host already has.
+- **Authenticated portal** — when a stable URL is wanted instead:
+  HTTPS endpoint with basic auth or a tailnet join. This is the only
+  shape that introduces inbound traffic, so it stays optional.
 
 ## Deploy walkthrough (Lightsail path)
 

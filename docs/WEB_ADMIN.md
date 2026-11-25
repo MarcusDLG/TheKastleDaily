@@ -16,9 +16,12 @@ preserved by making admin a separate, opt-in compose service.
 
 Editorial config is the one structural gap: `schedule.py` and
 `selection.py` read `config/editorial.yaml` from the image. Phase 3
-requires it to move — either onto the `/data` volume (seeded from the
-baked default on first boot, minimal diff) or into a `settings` table
-(the clean end-state). The volume move is the recommended first step.
+requires it to move.
+
+**Decision: volume-first.** `/data/editorial.yaml` — seeded from the
+baked default on first boot, edited live by the admin surface, read on
+every edition run. A `settings` table remains available as a later
+normalization, not a prerequisite.
 
 ## Architecture
 
@@ -37,8 +40,12 @@ admin:
 - `profiles: [admin]` keeps the service off unless explicitly raised
   (`docker compose --profile admin up -d`), so the hardened default
   deployment is untouched.
-- Localhost binding on the NAS; cloud deployments put it behind a
-  tailnet or a basic-auth token — never bare-public.
+- **Access policy — LAN/loopback only.** On the NAS the browser is on
+  the same LAN; on a cloud host an SSH tunnel
+  (`ssh -L 8080:localhost:8080`) reaches it with zero ingress change.
+  An authenticated HTTPS portal is the optional step-up for
+  AWS-deployed instances that want a stable URL — it is the only shape
+  that opens inbound traffic, so it is never the default.
 - SQLite WAL + busy timeout are already set; rare, small admin writes
   alongside the worker are safe — no row-level locking needed.
 
