@@ -9,8 +9,8 @@ One long-running `worker` container runs the whole pipeline. It
 sleeps most of the day, wakes every fifteen minutes, and once the
 local edition time passes in America/New_York it executes the
 pipeline for that calendar day: Alembic migrations, source
-registration, RSS ingestion, editorial selection, and (as later
-milestones land) drafting, EPUB rendering and delivery. One edition
+registration, RSS/Atom ingestion, editorial selection and evidence
+drafting, with EPUB rendering and delivery as later milestones. One edition
 per calendar day is guaranteed by the edition-date key and by the
 worker's run-state file, with at most three attempts per edition.
 `python -m app.schedule --once` runs the same pipeline immediately

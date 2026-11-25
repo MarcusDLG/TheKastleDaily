@@ -118,11 +118,11 @@ Additional security findings are maintained in SECURITY.md.
 | Workstream | Status |
 |---|---|
 | M00 initialization and feasibility | Accepted |
-| M02 persistence and migrations | Superseded: SQLite worker runtime in progress (see [M02](M02.md)) |
-| Source ingestion | Planned |
-| Editorial engine | Planned |
-| EPUB generation and delivery | Planned |
-| Scheduling and observability | In progress (worker loop and health heartbeat implemented) |
+| M02 persistence and migrations | Superseded by the SQLite worker runtime |
+| Source ingestion | Implemented (RSS and Atom, expanded registry) |
+| Editorial engine | In progress (selection and evidence drafting implemented) |
+| EPUB generation and delivery | In progress (renderer and validation implemented; delivery pending) |
+| Scheduling and observability | Implemented (worker loop and health heartbeat) |
 | Web administration | Planned |
 | MCP integration | Planned |
 | NAS deployment and recovery | Planned |
