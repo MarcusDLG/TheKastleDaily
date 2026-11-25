@@ -132,7 +132,7 @@ OpenAI generation and NAS deployment remain unqualified.
 | M02 persistence and migrations | Superseded by the SQLite worker runtime |
 | Source ingestion | Implemented (RSS and Atom, expanded registry) |
 | Editorial engine | In progress (selection, evidence drafting, OpenAI provider adapter and edition build implemented; model generation pending qualification) |
-| EPUB generation and delivery | In progress (renderer, validation, pipeline build and SMTP outbox implemented; live send pending qualification) |
+| EPUB generation and delivery | Implemented (renderer, validation, pipeline build and SMTP outbox; live Send-to-Kindle qualified end to end) |
 | Scheduling and observability | Implemented (worker loop and health heartbeat) |
 | Web administration | Planned |
 | MCP integration | Planned |
