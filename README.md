@@ -86,6 +86,7 @@ Run the SQLite persistence and ingestion acceptance checks with
 - [Editorial selection](docs/EDITORIAL_SELECTION.md)
 - [Editorial drafting](docs/EDITORIAL_DRAFTING.md)
 - [EPUB edition build](docs/EPUB_EDITION.md)
+- [Delivery outbox](docs/DELIVERY.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security](docs/SECURITY.md)
 - [External integrations](docs/INTEGRATIONS.md)
