@@ -77,6 +77,7 @@ def run_pipeline() -> None:
     from app.models import Edition
     from app.openai import openai_generator
     from app.pilot import register_sources
+    from app.retention import prune
     from app.selection import build_plan
 
     alembic_main(argv=["upgrade", "head"])
@@ -115,6 +116,9 @@ def run_pipeline() -> None:
                     session.commit()
                     delivery = {"status": "queued" if created else "exists"}
         outbox = drain_safely(engine)
+        with session_factory(engine)() as session:
+            retention = prune(session, editions_dir())
+            session.commit()
         print(
             json.dumps(
                 {
@@ -123,6 +127,7 @@ def run_pipeline() -> None:
                     "edition": edition,
                     "delivery": delivery,
                     "outbox": outbox,
+                    "retention": retention,
                 },
                 default=str,
                 indent=2,
