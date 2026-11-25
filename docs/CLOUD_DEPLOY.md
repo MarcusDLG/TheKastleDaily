@@ -81,7 +81,9 @@ definition (0.5 vCPU / 1 GB fits the workload), EventBridge schedule
 
 ## Milestone checklist
 
-- [ ] GHCR publication authorized + first push (M00-GOV-003)
+- [x] GHCR publication authorized + first push (M00-GOV-003) —
+      `ghcr.io/marcusdlg/kastle-daily:latest` public, anonymous
+      amd64/arm64 pull verified
 - [ ] `docs/DEPLOY.md` — friend-facing install (compose + env only)
 - [ ] `.env.example` annotated for cloud secrets backends
 - [ ] Optional: `deploy/` directory with a bootstrap script per shape

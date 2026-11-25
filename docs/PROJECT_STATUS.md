@@ -104,7 +104,7 @@ See INTEGRATIONS.md for implementation constraints.
 | POST-MVP-001 | NAS backup and disaster recovery | Owner-approved post-MVP remediation |
 | M00-EXC-001 | PostgreSQL libxml2 exception | Closed: PostgreSQL image removed |
 | M00-EXC-002 | PostgreSQL gosu exceptions | Closed: PostgreSQL image removed |
-| M00-GOV-003 | GHCR access verification | First authorized publication |
+| M00-GOV-003 | GHCR access verification | Closed: `ghcr.io/marcusdlg/kastle-daily` public, anonymous multi-arch pull verified |
 | M00-C-OPEN | Formal EPUBCheck validation | Before production EPUB delivery |
 | M00-D-OPEN | Live integration qualification | During relevant implementation milestones |
 | NAS-PERF | Concurrent workload benchmarking | Before production acceptance |
