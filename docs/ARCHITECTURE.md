@@ -10,14 +10,18 @@ sleeps most of the day, wakes every fifteen minutes, and once the
 local edition time passes in America/New_York it executes the
 pipeline for that calendar day: Alembic migrations, source
 registration, RSS/Atom ingestion, editorial selection and evidence
-drafting, with EPUB rendering and delivery as later milestones. One edition
+drafting, and the EPUB edition build, with delivery as a later
+milestone. One edition
 per calendar day is guaranteed by the edition-date key and by the
 worker's run-state file, with at most three attempts per edition.
 `python -m app.schedule --once` runs the same pipeline immediately
 for manual operation.
 
 SQLite replaces PostgreSQL. The single database file lives on a
-named volume at `/data/kastle.db`; backup is a file copy. WAL mode,
+named volume at `/data/kastle.db`; backup is a file copy. Rendered
+EPUBs live beside it at `/data/editions/<edition-date>.epub` and are
+rebuildable from the persisted run, so they are excluded from the
+backup contract. WAL mode,
 foreign keys, a busy timeout and normal synchronous mode are set on
 every connection. There is one writer (the worker), so no row-level
 locking is needed. Operational timestamps are stored as UTC.

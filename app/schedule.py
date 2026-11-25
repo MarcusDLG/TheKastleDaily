@@ -15,7 +15,7 @@ of the clock, and exits.
 import argparse
 import json
 import time
-from datetime import UTC, datetime, time as dtime
+from datetime import UTC, date, datetime, time as dtime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -65,9 +65,10 @@ def edition_due(now_utc: datetime, last_edition: str | None, zone, at) -> str | 
 
 
 def run_pipeline() -> None:
-    """Migrate, register sources, ingest, select, and draft today's edition."""
+    """Migrate, register sources, ingest, select, draft, and build the edition."""
     from alembic.config import main as alembic_main
 
+    from app.build import build_edition, editions_dir, latest_succeeded_run
     from app.database import database_engine, session_factory
     from app.drafting import run_drafting
     from app.ingest import ingest_sources
@@ -87,7 +88,24 @@ def run_pipeline() -> None:
                 session.commit()
         else:
             drafting = {"status": "skipped", "reason": "coverage_floor_unmet"}
-        print(json.dumps({"selection": plan, "drafting": drafting}, default=str, indent=2))
+
+        # Building runs off the persisted run, so it also resumes a pass
+        # that drafted successfully but failed before the EPUB landed.
+        edition = {"status": "skipped", "reason": "no_drafted_run"}
+        with session_factory(engine)() as session:
+            run = latest_succeeded_run(session, date.fromisoformat(plan["edition_date"]))
+            if run is not None:
+                edition = build_edition(session, run, editions_dir())
+                session.commit()
+        print(
+            json.dumps(
+                {"selection": plan, "drafting": drafting, "edition": edition},
+                default=str,
+                indent=2,
+            )
+        )
+        if edition["status"] == "failed":
+            raise RuntimeError(f"Edition build failed: {edition['error']}")
     finally:
         engine.dispose()
 

@@ -31,5 +31,28 @@ the drafts directory, and each image must be at most 4 MiB.
 
 The build writes the final path only after EPUBCheck passes with no
 warnings. Identical plan and draft inputs generate identical output.
-The reviewed drafts and story photos remain local inputs. Automatic evidence
-gathering, drafting, delivery and scheduling are separate integration work.
+The reviewed drafts and story photos remain local inputs.
+
+## Automated edition build
+
+After drafting, the worker builds the edition from the latest succeeded
+editorial run for the New York edition date. The run's stored selection
+plan is restricted to the stories that actually drafted; if the original
+reserve pick was blocked, the newest surviving reserve-category story
+carries the flag, and if no reserve-category story remains the build
+fails. The rendered bytes are hashed with SHA-256 and moved into
+`editions/<edition-date>.epub` beside the database atomically, so a
+failed build never disturbs a previous artifact.
+
+The `editions` row records the artifact path as `epub_key`, the hex
+digest as `epub_sha256`, and status `validated`; `edition_stories` map
+the renderer's order back to the run's stories so later selections
+exclude articles already published in a validated edition. Rebuilding a
+date with a validated artifact in place is a no-op, and a failed build
+is recorded as `failed` so the scheduler's bounded attempts can retry.
+
+The pipeline `validated` status means the renderer's contract checks
+passed; EPUBCheck 5.4.0 remains a CI and acceptance gate on the same
+deterministic renderer rather than a per-edition worker step, because
+the worker image carries no Java runtime. The delivery outbox and SMTP
+submission remain separate milestones.
