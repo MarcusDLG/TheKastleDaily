@@ -63,6 +63,10 @@ REPAIR_PROMPT = (
     "Your previous reply was not valid JSON. Reply with only a JSON "
     "object containing headline, paragraphs and sources."
 )
+REJECTED_PROMPT = (
+    "Your previous reply was rejected: {reason}. Reply with only a "
+    "corrected JSON object containing headline, paragraphs and sources."
+)
 
 
 def _output_schema() -> dict:
@@ -232,7 +236,12 @@ class OpenAIGenerator:
         self._bill(response.get("usage") or {})
         return response
 
-    def generate(self, story: dict, evidence_text: str) -> DraftOutput | None:
+    def generate(
+        self,
+        story: dict,
+        evidence_text: str,
+        check: Callable[[DraftOutput], str | None] | None = None,
+    ) -> DraftOutput | None:
         if self._degraded or self.estimated_cost_usd >= self.max_cost_usd:
             return None
         messages = self._messages(story, evidence_text)
@@ -241,23 +250,33 @@ class OpenAIGenerator:
             if response is None:
                 return None
             content = ""
+            error = "Model output violated the draft schema"
+            repair = REPAIR_PROMPT
             try:
                 content = response["choices"][0]["message"].get("content") or ""
                 draft = json.loads(content)
-                return DraftOutput(
+                output = DraftOutput(
                     headline=str(draft["headline"]),
                     paragraphs=tuple(str(p) for p in draft["paragraphs"]),
                     sources=tuple(dict(s) for s in draft["sources"]),
                 )
             except (KeyError, IndexError, TypeError, ValueError):
-                pass  # fall through to the repair attempt
+                if content:
+                    error += f": {content[:160]!r}"
+            else:
+                if check is None:
+                    return output
+                reason = check(output)
+                if reason is None:
+                    return output
+                error = reason
+                repair = REJECTED_PROMPT.format(reason=reason)
             if attempt or self.estimated_cost_usd >= self.max_cost_usd:
                 break
             if content:
                 messages.append({"role": "assistant", "content": content})
-            messages.append({"role": "user", "content": REPAIR_PROMPT})
-        detail = f": {content[:160]!r}" if content else ""
-        raise ValueError(f"Model output violated the draft schema{detail}")
+            messages.append({"role": "user", "content": repair})
+        raise ValueError(error)
 
 
 def openai_generator():

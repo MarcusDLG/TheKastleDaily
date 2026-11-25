@@ -15,7 +15,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Callable, Protocol
 
 from sqlalchemy import func, select
 
@@ -48,7 +48,9 @@ class Generator(Protocol):
     """Turns one selected story plus extracted evidence into a draft.
 
     `generate` may return None to decline a story. Implementations report
-    usage on the run record via the token and cost attributes.
+    usage on the run record via the token and cost attributes. `check`,
+    when given, returns a rejection reason (or None when the output is
+    acceptable) so providers can repair before the story is blocked.
     """
 
     name: str
@@ -56,7 +58,12 @@ class Generator(Protocol):
     output_tokens: int
     estimated_cost_usd: Decimal
 
-    def generate(self, story: dict, evidence_text: str) -> DraftOutput | None:
+    def generate(
+        self,
+        story: dict,
+        evidence_text: str,
+        check: Callable[[DraftOutput], str | None] | None = None,
+    ) -> DraftOutput | None:
         ...
 
 
@@ -72,18 +79,26 @@ class TemplateGenerator:
     input_tokens = output_tokens = 0
     estimated_cost_usd = Decimal("0")
 
-    def generate(self, story: dict, evidence_text: str) -> DraftOutput | None:
+    def generate(
+        self,
+        story: dict,
+        evidence_text: str,
+        check: Callable[[DraftOutput], str | None] | None = None,
+    ) -> DraftOutput | None:
         blocks = [b.strip() for b in evidence_text.split("\n\n") if b.strip()]
         if len(blocks) < MIN_PARAGRAPHS:
             blocks = [b.strip() for b in evidence_text.split("\n") if b.strip()]
         paragraphs = tuple(
             b[:PARAGRAPH_MAX] for b in blocks if len(b) >= PARAGRAPH_MIN
         )
-        return DraftOutput(
+        output = DraftOutput(
             headline=story["title"].strip()[:HEADLINE_MAX],
             paragraphs=paragraphs[:MAX_PARAGRAPHS],
             sources=({"url": story["url"], "label": story["publisher"]},),
         )
+        if check is not None and (reason := check(output)) is not None:
+            raise ValueError(reason)
+        return output
 
 
 def validate_draft(output: DraftOutput, allowed_urls: set) -> DraftOutput:
@@ -175,10 +190,18 @@ def run_drafting(
                 )
             )
         ) | {article.canonical_url}
+        def check(output):
+            try:
+                validate_draft(output, allowed)
+            except (ValueError, AttributeError, TypeError) as error:
+                return str(error)
+            return None
+
         try:
             generated = generator.generate(
                 dict(story, observed_urls=sorted(allowed)),
                 acquisition.extracted_text,
+                check=check,
             )
             if generated is None:
                 raise ValueError("generator declined the story")

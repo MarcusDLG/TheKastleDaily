@@ -67,9 +67,10 @@ gpt-5-family models spend completion tokens on reasoning before
 content, so `OPENAI_REASONING_EFFORT` (default `low`, gpt-5-family
 only) bounds that spend and the completion cap leaves headroom for
 both reasoning and output — an undersized cap makes the model return
-empty content. A reply that is not valid JSON gets one repair attempt
-(feeding the bad reply back with a schema reminder) before the story
-is blocked. Blocked stories record a per-story reason on
+empty content. A reply that is not valid JSON — or that parses but
+violates the draft contract — gets one repair attempt feeding the
+rejected reply and the reason back before the story is blocked.
+Blocked stories record a per-story reason on
 `editorial_runs.error_detail` (a capped JSON list) alongside the
 `stories_blocked` error code.
 
