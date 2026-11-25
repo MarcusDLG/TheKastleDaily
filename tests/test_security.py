@@ -27,9 +27,12 @@ def test_no_credentials_in_compose_environment():
 def test_no_database_service_or_published_ports():
     compose = load_yaml("compose.yaml")
 
-    assert set(compose["services"]) == {"worker"}
-    for service in compose["services"].values():
-        assert not service.get("ports")
+    assert set(compose["services"]) <= {"worker", "admin"}
+    for name, service in compose["services"].items():
+        for mapping in service.get("ports", []):
+            # The worker never publishes; the opt-in admin service may
+            # publish only on the host loopback.
+            assert name == "admin" and str(mapping).startswith("127.0.0.1:")
 
 
 def test_container_images_digest_pinned():

@@ -31,8 +31,10 @@ Retention is bounded at 30 days: each pass deletes EPUBs, covers,
 stored photos and every row older than the window, children before
 parents so foreign keys hold — the `sources` feed registry is
 configuration and is never pruned.
-There is no listening network service: the container publishes no
-ports and the host port 5432 conflict is no longer relevant.
+The worker has no listening network service and publishes no ports.
+An optional `admin` compose service (profiles: `admin`) serves a
+read-only operations dashboard; it binds the container's own interface
+and is published on the host loopback only (`127.0.0.1:8080`).
 
 ## Database model
 
