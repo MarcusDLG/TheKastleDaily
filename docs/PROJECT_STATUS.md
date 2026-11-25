@@ -113,6 +113,17 @@ See INTEGRATIONS.md for implementation constraints.
 
 Additional security findings are maintained in SECURITY.md.
 
+## Live integration qualification
+
+2026-11-25: first automated end-to-end delivery. A live pipeline run
+selected 13 stories (coverage floor met), drafted via the template
+generator, rendered and validated the edition (sha256 `c63246dc…`), and
+submitted it through the dedicated Gmail sender — `smtp_accepted` on
+attempt 1. Amazon converted and synced the document, and it arrived on
+the Kindle Paperwhite navigable end to end. Provider submission,
+library sync and device receipt are evidenced separately as required.
+OpenAI generation and NAS deployment remain unqualified.
+
 ## Development roadmap
 
 | Workstream | Status |
