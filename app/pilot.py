@@ -1,5 +1,6 @@
 """Register the personal RSS and Atom source registry."""
 
+from sqlalchemy import update
 from sqlalchemy.dialects.sqlite import insert
 
 from app.database import database_engine
@@ -15,7 +16,7 @@ PILOT_SOURCES = (
         DISCOVERY + " Yahoo aggregates coverage from multiple outlets.",
     ),
     ("RaceFans", "https://www.racefans.net/feed/", "motorsport", DISCOVERY),
-    ("The Race", "https://www.the-race.com/feed/", "motorsport", DISCOVERY),
+    ("The Race", "https://www.the-race.com/rss/", "motorsport", DISCOVERY),
     ("Sportscar365", "https://sportscar365.com/feed/", "motorsport", DISCOVERY),
     ("iRacing", "https://www.iracing.com/feed/", "sim_racing", DISCOVERY),
     ("Traxion", "https://traxion.gg/feed/", "sim_racing", DISCOVERY),
@@ -34,13 +35,31 @@ PILOT_SOURCES = (
     ),
     (
         "Tom's Hardware",
-        "https://www.tomshardware.com/feeds/all",
+        "https://www.tomshardware.com/feeds.xml",
         "technology_ai",
         DISCOVERY,
     ),
     (
         "Simon Willison",
         "https://simonwillison.net/atom/everything/",
+        "software_engineering",
+        DISCOVERY,
+    ),
+    (
+        "Martin Fowler",
+        "https://martinfowler.com/feed.atom",
+        "software_engineering",
+        DISCOVERY + " Atom feed.",
+    ),
+    (
+        "Pragmatic Engineer",
+        "https://newsletter.pragmaticengineer.com/feed",
+        "software_engineering",
+        DISCOVERY,
+    ),
+    (
+        "Netflix Tech Blog",
+        "https://netflixtechblog.com/feed",
         "software_engineering",
         DISCOVERY,
     ),
@@ -52,6 +71,12 @@ PILOT_SOURCES = (
     ),
     ("Hackaday", "https://hackaday.com/feed/", "maker_fabrication", DISCOVERY),
     ("Prusa3D", "https://blog.prusa3d.com/feed/", "maker_fabrication", DISCOVERY),
+    (
+        "Arduino Blog",
+        "https://blog.arduino.cc/feed/",
+        "maker_fabrication",
+        DISCOVERY,
+    ),
     ("RTL-SDR", "https://www.rtl-sdr.com/feed/", "radio_comms", DISCOVERY),
     ("Meshtastic", "https://meshtastic.org/blog/rss.xml", "radio_comms", DISCOVERY),
     ("Spaceflight Now", "https://spaceflightnow.com/feed/", "space", DISCOVERY),
@@ -62,8 +87,14 @@ PILOT_SOURCES = (
         "culinary",
         DISCOVERY,
     ),
+    (
+        "Smitten Kitchen",
+        "https://feeds.feedburner.com/smittenkitchen",
+        "culinary",
+        DISCOVERY,
+    ),
     ("PetaPixel", "https://petapixel.com/feed/", "visual_craft", DISCOVERY),
-    ("DPReview", "https://www.dpreview.com/feeds/news.xml", "visual_craft", DISCOVERY),
+    ("DPReview", "https://www.dpreview.com/feed/", "visual_craft", DISCOVERY),
     ("ServeTheHome", "https://www.servethehome.com/feed/", "homelab", DISCOVERY),
     ("Reef Builders", "https://reefbuilders.com/feed/", "life_systems", DISCOVERY),
     (
@@ -72,33 +103,59 @@ PILOT_SOURCES = (
         "life_systems",
         DISCOVERY,
     ),
+    ("iRunFar", "https://www.irunfar.com/feed", "life_systems", DISCOVERY),
+    (
+        "Epic Gardening",
+        "https://www.epicgardening.com/feed/",
+        "life_systems",
+        DISCOVERY,
+    ),
+    ("Farnam Street", "https://fs.blog/feed/", "life_systems", DISCOVERY),
 )
 
-# Verified as serving valid feeds but blocked to datacenter fetchers (HTTP 403).
-# Retest from the residential NAS connection before flipping to "approved".
+# Verified as serving valid feeds but returning HTTP 403 to non-browser
+# fetchers (Cloudflare bot gate; a residential retest with a browser
+# user-agent also failed). Kept "pending"; clearing them needs a
+# fetch-path change, not a different network.
 PENDING_SOURCES = (
     (
         "Jayski's NASCAR",
         "https://www.jayski.com/feed/",
         "motorsport",
-        "Pending NAS-side retest; datacenter fetch returned HTTP 403.",
+        "HTTP 403 from datacenter and residential fetchers.",
     ),
     (
         "Serious Eats",
         "https://www.seriouseats.com/feed",
         "culinary",
-        "Pending NAS-side retest; datacenter fetch returned HTTP 403.",
+        "HTTP 403 from datacenter and residential fetchers.",
     ),
     (
         "All3DP",
         "https://all3dp.com/feed/",
         "maker_fabrication",
-        "Pending NAS-side retest; datacenter fetch returned HTTP 403.",
+        "HTTP 403 from datacenter and residential fetchers.",
     ),
+)
+
+# Feeds that permanently moved; the fetcher refuses redirects by design.
+# Their replacements are registered above. Existing rows for the old
+# endpoints are flipped to "disabled" so ingestion history stays linked.
+RETIRED_ENDPOINTS = frozenset(
+    {
+        "https://www.dpreview.com/feeds/news.xml",
+        "https://www.the-race.com/feed/",
+        "https://www.tomshardware.com/feeds/all",
+    }
 )
 
 
 def register_sources(connection):
+    connection.execute(
+        update(Source)
+        .where(Source.endpoint.in_(RETIRED_ENDPOINTS))
+        .values(approval="disabled")
+    )
     rows = [
         {
             "kind": "rss",
