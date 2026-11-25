@@ -68,9 +68,15 @@ is read-only and every POST fails closed with 403. A per-process form
 token protects writes against CSRF; categories validate against the
 editorial weights; redirect-after-POST carries a flash line.
 
-**Phase 3 — editorial tuning.** Weights, target article count,
-timezone and edition time against the relocated config; a restart-free
-read path so the next edition picks it up.
+**Phase 3 — editorial tuning. Implemented.** `app/config.py` is the
+volume-first layer: `<db dir>/editorial.yaml` seeds from the baked
+default on first load; `schedule.py`/`selection.py` read it live —
+saves take effect on the next edition, no restart. The admin form
+edits target count, edition time, timezone and per-genre weights (sum
+enforced at 100, non-negative integers, valid IANA zone, HH:MM time);
+new genres are a name+weight row. `KASTLE_EDITORIAL_CONFIG` overrides
+the path outright. Writes are validated before landing and saved
+atomically (tmp + replace).
 
 ## Framework decision point
 

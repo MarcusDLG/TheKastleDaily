@@ -19,6 +19,7 @@ import base64
 import hmac
 import json
 import os
+import re
 import socket
 from datetime import UTC, datetime, timedelta
 from html import escape
@@ -26,7 +27,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 from uuid import UUID, uuid4
 
-import yaml
 from sqlalchemy import func, select
 
 from app.models import (
@@ -88,13 +88,11 @@ APPROVAL_STATES = ("pending", "approved", "disabled")
 SOURCE_KINDS = ("rss", "youtube")
 
 
-def editorial_categories(config_path="config/editorial.yaml") -> list[str]:
-    """Valid feed categories — the genre weights in editorial config."""
-    try:
-        config = yaml.safe_load(open(config_path).read()) or {}
-    except OSError:
-        return []
-    return sorted(config.get("weights", {}).keys())
+def editorial_categories() -> list[str]:
+    """Valid feed categories — the genre weights in live editorial config."""
+    from app.config import load_editorial_config
+
+    return sorted(load_editorial_config().get("weights", {}).keys())
 
 
 def admin_credentials() -> tuple[str, str | None]:
@@ -147,6 +145,37 @@ def set_source_state(session, source_id: str, approval: str) -> None:
     if source is None:
         raise ValueError("unknown source")
     source.approval = approval
+
+
+def save_editorial(fields: dict) -> None:
+    """Apply the editorial form onto the live config. Preserves keys the
+    form doesn't edit (social_video_sources). Raises ValueError."""
+    from app.config import load_editorial_config, save_editorial_config
+
+    config = load_editorial_config()
+    try:
+        target = int(fields.get("target_articles", ""))
+    except ValueError:
+        raise ValueError("target_articles must be a number") from None
+    weights = {}
+    for key, value in fields.items():
+        if key.startswith("w_") and value.strip() != "":
+            try:
+                weights[key[2:]] = int(value)
+            except ValueError:
+                raise ValueError(f"weight for {key[2:]} must be a number") from None
+    new_category = fields.get("new_category", "").strip()
+    if new_category:
+        if not re.fullmatch(r"[a-z0-9_]+", new_category):
+            raise ValueError("new category must be lowercase letters, digits, _")
+        weights[new_category] = int(fields.get("new_weight", "0") or 0)
+    config.update(
+        weights=weights,
+        target_articles=target,
+        edition_time=fields.get("edition_time", "").strip(),
+        timezone=fields.get("timezone", "").strip(),
+    )
+    save_editorial_config(config)
 
 
 def dashboard_data(session) -> dict:
@@ -239,7 +268,8 @@ def dashboard_data(session) -> dict:
 
 
 def render_html(
-    data: dict, *, token: str, writable: bool, categories: list, flash=None
+    data: dict, *, token: str, writable: bool, categories: list,
+    editorial: dict, flash=None,
 ) -> str:
     stats = data["stats"]
     mode = "read + write" if writable else "read-only"
@@ -368,8 +398,42 @@ def render_html(
         )
     else:
         rows.append(
-            "<p class='muted'>Set ADMIN_PASSWORD to enable feed management."
-            "</p>"
+            "<p class='muted'>Set ADMIN_PASSWORD to enable feed management "
+            "and editorial tuning.</p>"
+        )
+    if writable:
+        weight_rows = "".join(
+            f"<tr><td>{escape(cat)}</td>"
+            f"<td><input name='w_{escape(cat)}' type='number' min='0' "
+            f"value='{int(weight)}' style='width:5em'></td></tr>"
+            for cat, weight in sorted(
+                (editorial.get("weights") or {}).items()
+            )
+        )
+        rows.append(
+            "<h2>Editorial</h2>"
+            "<form method='post' action='/editorial/save'>"
+            f"<input type='hidden' name='token' value='{token}'>"
+            "<table>"
+            "<tr><td>Target articles</td><td><input name='target_articles' "
+            f"type='number' min='1' max='50' value='"
+            f"{int(editorial.get('target_articles') or 15)}' "
+            "style='width:5em'></td></tr>"
+            "<tr><td>Edition time</td><td><input name='edition_time' "
+            f"value='{escape(str(editorial.get('edition_time', '07:00')))}' "
+            "placeholder='HH:MM'></td></tr>"
+            "<tr><td>Timezone</td><td><input name='timezone' "
+            f"value='{escape(str(editorial.get('timezone', 'America/New_York')))}'"
+            "></td></tr>"
+            "</table>"
+            "<h2>Genre weights (must sum to 100)</h2><table>"
+            f"{weight_rows}"
+            "<tr><td><input name='new_category' "
+            "placeholder='new_category'></td>"
+            "<td><input name='new_weight' type='number' min='0' "
+            "placeholder='0' style='width:5em'></td></tr>"
+            "</table>"
+            "<button type='submit'>Save editorial config</button></form>"
         )
     rows.append("<p class='muted'>Refresh: reload the page.</p></body></html>")
     return "".join(rows)
@@ -443,12 +507,15 @@ def make_handler(factory, *, token: str, username: str, password: str | None,
             for kind in ("ok", "err"):
                 if params.get(kind):
                     flash = (kind, params[kind][0])
+            from app.config import load_editorial_config
+
             with factory() as session:
                 body = render_html(
                     dashboard_data(session),
                     token=token,
                     writable=password is not None,
                     categories=categories,
+                    editorial=load_editorial_config(),
                     flash=flash,
                 ).encode()
             self._respond(200, "text/html; charset=utf-8", body)
@@ -477,6 +544,9 @@ def make_handler(factory, *, token: str, username: str, password: str | None,
                         )
                         session.commit()
                         self._redirect("ok", "feed updated")
+                    elif path == "/editorial/save":
+                        save_editorial(fields)
+                        self._redirect("ok", "editorial config saved")
                     else:
                         self._respond(404, "text/plain", b"not found")
             except ValueError as error:
