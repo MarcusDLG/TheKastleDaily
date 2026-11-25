@@ -7,6 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt .
 
+# CVE-2026-124851: libzstd1 fix (deb13u1) predates the pinned base rebuild.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libzstd1 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN python -m pip install \
     --no-cache-dir \
     --require-hashes \
