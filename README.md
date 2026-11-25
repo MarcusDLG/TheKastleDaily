@@ -53,8 +53,9 @@ attempts:
    `editions/photos/`) and drafting. The default template
    generator needs no credentials; setting `OPENAI_API_KEY`
    switches to an OpenAI adapter with a per-edition cost cap.
-5. EPUB edition build and validation, persisted beside the
-   database at `editions/<edition-date>.epub`.
+5. EPUB edition build with a generated masthead cover and
+   contract validation, persisted beside the database at
+   `editions/<edition-date>.epub`.
 6. Delivery: a persistent SMTP outbox submits the edition to
    the configured Kindle address with bounded retries;
    ambiguous submissions are held for manual reconciliation.
