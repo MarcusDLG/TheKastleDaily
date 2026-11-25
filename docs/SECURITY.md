@@ -272,7 +272,10 @@ Results are time-dependent and must be reassessed by subsequent scans.
 | M00-QA-003 | Invalid Gitleaks JSON report | Corrected and locally validated |
 | M00-GOV-001 | Independent release reviewer unavailable | Manual authorization accepted |
 | M00-GOV-002 | Native secret scanning unavailable | Compensating controls implemented |
-| M00-GOV-003 | GHCR access verification | Deferred until authorized publication |
+| M00-GOV-003 | GHCR access verification | Closed: public anonymous pull verified |
+| NAS-SEC-TLS | Admin service Basic auth travels cleartext over LAN HTTP | Open — TLS or tailnet upgrade planned |
+| NAS-SEC-DIGEST | NAS pulls mutable `:latest` tag without signature verification | Open — digest-pinned pulls planned |
+| NAS-SEC-RATE | Admin Basic auth has no rate limiting | Accepted — 96-bit random credential; revisit if a memorable password replaces it |
 | M00-TECH-001 | Starlette TestClient deprecation | Nonblocking technical debt |
 | M00-TECH-002 | Gitleaks maintenance lifecycle | Monitor |
 | M00-ENV-001 | Insufficient local disk space | Resolved |
