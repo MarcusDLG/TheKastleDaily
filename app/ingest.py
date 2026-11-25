@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 
 from app.database import database_engine, session_factory
 from app.models import Article, ArticleSource, IngestionRun, Source

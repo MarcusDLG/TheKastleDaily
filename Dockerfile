@@ -18,7 +18,8 @@ RUN python -m pip install \
     --only-binary=:all: \
     -r requirements.txt \
     && python -m pip check \
-    && useradd --system --uid 10001 appuser
+    && useradd --system --uid 10001 appuser \
+    && install -d -o appuser -g appuser /data
 
 COPY app ./app
 COPY config/editorial.yaml ./config/editorial.yaml

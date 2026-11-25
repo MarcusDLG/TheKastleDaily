@@ -141,7 +141,7 @@ def read_candidates(session, cutoff, edition_date):
     return [Candidate(*row) for row in session.execute(query)]
 
 
-def build_plan(edition_date=None):
+def build_plan(edition_date=None, engine=None):
     """Compute the selection plan for one edition date (defaults to today)."""
     config = yaml.safe_load(Path("config/editorial.yaml").read_text())
     zone = ZoneInfo(config["timezone"])
@@ -153,7 +153,9 @@ def build_plan(edition_date=None):
     end = datetime.combine(edition_date + timedelta(days=1), time.min, zone)
     cutoff = min(now, end.astimezone(UTC) - timedelta(microseconds=1))
 
-    engine = database_engine()
+    own_engine = engine is None
+    if own_engine:
+        engine = database_engine()
     try:
         with session_factory(engine)() as session:
             candidates = read_candidates(session, cutoff, edition_date)
@@ -161,7 +163,8 @@ def build_plan(edition_date=None):
             candidates, config["target_articles"], config["weights"], cutoff
         )
     finally:
-        engine.dispose()
+        if own_engine:
+            engine.dispose()
     return {"edition_date": edition_date.isoformat()} | plan
 
 

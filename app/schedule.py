@@ -79,7 +79,7 @@ def run_pipeline() -> None:
         with engine.begin() as connection:
             register_sources(connection)
         ingest_sources(session_factory(engine))
-        print(json.dumps(build_plan(), default=str, indent=2))
+        print(json.dumps(build_plan(engine=engine), default=str, indent=2))
     finally:
         engine.dispose()
 
@@ -95,7 +95,8 @@ def main(argv=None) -> int:
 
     if args.once:
         run_pipeline()
-        write_state(path, last_outcome="manual")
+        today = datetime.now(UTC).astimezone(zone).date().isoformat()
+        write_state(path, last_edition=today, last_outcome="manual")
         return 0
 
     while True:

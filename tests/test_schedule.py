@@ -62,6 +62,18 @@ def test_state_round_trip_and_corruption_tolerance(tmp_path):
     assert schedule.read_state(path) == {}
 
 
+def test_once_run_suppresses_the_scheduled_edition(tmp_path, monkeypatch):
+    monkeypatch.setenv("KASTLE_DB", str(tmp_path / "kastle.db"))
+    monkeypatch.setattr(schedule, "run_pipeline", lambda: None)
+    assert schedule.main(["--once"]) == 0
+
+    state = schedule.read_state(schedule.state_path())
+    today = datetime.now(UTC).astimezone(ZONE).date().isoformat()
+    assert state["last_outcome"] == "manual"
+    assert state["last_edition"] == today
+    assert schedule.edition_due(datetime.now(UTC), state["last_edition"], ZONE, AT) is None
+
+
 def test_failed_attempts_are_counted_per_edition(tmp_path):
     path = tmp_path / "run-state.json"
     schedule.write_state(path, failed_date="2026-11-25", failed_attempts=1)

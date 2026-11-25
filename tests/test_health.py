@@ -25,3 +25,10 @@ def test_stale_wake_is_unhealthy(tmp_path, monkeypatch):
     write_wake(target, datetime.now(UTC) - timedelta(hours=2))
     monkeypatch.setattr(health, "state_path", lambda: target)
     assert health.main() == 1
+
+
+def test_naive_wake_is_unhealthy(tmp_path, monkeypatch):
+    target = tmp_path / "run-state.json"
+    write_wake(target, datetime.now(UTC).replace(tzinfo=None))
+    monkeypatch.setattr(health, "state_path", lambda: target)
+    assert health.main() == 1

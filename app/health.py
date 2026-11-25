@@ -14,6 +14,8 @@ def main() -> int:
         wake = datetime.fromisoformat(json.loads(state_path().read_text())["wake"])
     except (OSError, ValueError, KeyError):
         return 1
+    if wake.tzinfo is None:
+        return 1
     age = (datetime.now(UTC) - wake).total_seconds()
     return 0 if age < STALE_AFTER else 1
 
