@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 
 from app.database import database_engine, session_factory
 from app.models import Article, ArticleSource, IngestionRun, Source
@@ -61,11 +61,8 @@ def ingest_sources(sessions, fetch=fetch_feed):
     results = {}
     for source_id in source_ids:
         with sessions.begin() as session:
-            source = session.scalar(
-                _approved_rss()
-                .where(Source.id == source_id)
-                .with_for_update(skip_locked=True)
-            )
+            # Single-writer SQLite: no row locking needed or supported.
+            source = session.scalar(_approved_rss().where(Source.id == source_id))
             if source is None:
                 continue
             run = IngestionRun(source_id=source_id)

@@ -1,5 +1,6 @@
 target_articles: 15
 timezone: America/New_York
+edition_time: "07:00"
 weights:
   formula_1: 19
   nascar: 19

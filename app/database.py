@@ -1,41 +1,49 @@
-"""PostgreSQL connections for the runtime and the migration command."""
+"""SQLite persistence for the newspaper pipeline.
+
+One file, one writer. The database path comes from KASTLE_DB (default
+./data/kastle.db). WAL mode and foreign keys are enabled per connection.
+"""
 
 import os
+import sqlite3
+from pathlib import Path
 
-from sqlalchemy import URL, create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-SCHEMA = "newspaper"
+
+def database_path() -> str:
+    configured = os.environ.get("KASTLE_DB", "data/kastle.db")
+    if configured != ":memory:":
+        Path(configured).parent.mkdir(parents=True, exist_ok=True)
+    return configured
 
 
-def database_engine(*, migration: bool = False):
-    user, password_variable = (
-        ("kastle_migrator", "MIGRATION_DB_PASSWORD")
-        if migration
-        else ("kastle_app", "APP_DB_PASSWORD")
-    )
-    password = os.environ.get(password_variable)
-    if not password:
-        raise ValueError(f"Set {password_variable} to configure the database")
-    url = URL.create(
-        "postgresql+psycopg",
-        username=user,
-        password=password,
-        host=os.environ.get("DB_HOST", "db"),
-        port=int(os.environ.get("DB_PORT", "5432")),
-        database="kastle_daily",
-    )
-    return create_engine(
-        url,
-        pool_pre_ping=True,
-        pool_size=3,
-        max_overflow=0,
-        pool_timeout=3,
-        connect_args={"connect_timeout": 3, "options": "-c statement_timeout=3000"}
-        if not migration
-        else {"connect_timeout": 5},
-        hide_parameters=True,
-    )
+@event.listens_for(Engine, "connect")
+def _set_pragmas(connection, _record):
+    if isinstance(connection, sqlite3.Connection):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=15000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
+
+def database_engine():
+    path = database_path()
+    if path == ":memory:":
+        # One shared in-memory database for tests instead of one per pooled connection.
+        from sqlalchemy.pool import StaticPool
+
+        return create_engine(
+            "sqlite+pysqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+            hide_parameters=True,
+        )
+    return create_engine(f"sqlite+pysqlite:///{path}", hide_parameters=True)
 
 
 def session_factory(engine) -> sessionmaker[Session]:

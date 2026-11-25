@@ -141,22 +141,21 @@ def read_candidates(session, cutoff, edition_date):
     return [Candidate(*row) for row in session.execute(query)]
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--date", type=date.fromisoformat, help="New York edition date (YYYY-MM-DD)"
-    )
-    args = parser.parse_args()
+def build_plan(edition_date=None, engine=None):
+    """Compute the selection plan for one edition date (defaults to today)."""
     config = yaml.safe_load(Path("config/editorial.yaml").read_text())
     zone = ZoneInfo(config["timezone"])
     now = datetime.now(UTC)
-    edition_date = args.date if args.date else now.astimezone(zone).date()
+    if edition_date is None:
+        edition_date = now.astimezone(zone).date()
     if edition_date > now.astimezone(zone).date():
-        parser.error("The edition date cannot be in the future")
+        raise ValueError("The edition date cannot be in the future")
     end = datetime.combine(edition_date + timedelta(days=1), time.min, zone)
     cutoff = min(now, end.astimezone(UTC) - timedelta(microseconds=1))
 
-    engine = database_engine()
+    own_engine = engine is None
+    if own_engine:
+        engine = database_engine()
     try:
         with session_factory(engine)() as session:
             candidates = read_candidates(session, cutoff, edition_date)
@@ -164,12 +163,22 @@ def main():
             candidates, config["target_articles"], config["weights"], cutoff
         )
     finally:
-        engine.dispose()
-    print(
-        json.dumps(
-            {"edition_date": edition_date.isoformat()} | plan, default=str, indent=2
-        )
+        if own_engine:
+            engine.dispose()
+    return {"edition_date": edition_date.isoformat()} | plan
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--date", type=date.fromisoformat, help="New York edition date (YYYY-MM-DD)"
     )
+    args = parser.parse_args()
+    try:
+        plan = build_plan(args.date)
+    except ValueError as error:
+        parser.error(str(error))
+    print(json.dumps(plan, default=str, indent=2))
     return 0 if plan["coverage_floor_met"] else 2
 
 

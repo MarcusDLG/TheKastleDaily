@@ -17,18 +17,47 @@ SPEC.loader.exec_module(policy)
 
 REGISTER = ROOT / "config/security/exceptions.json"
 
-DIGEST = (
-    "sha256:"
-    "87c8b42f423b45d5247e6aa8fdb2e7762"
-    "fec164c68a50fe3eb07e7bfcaf4dbcf"
-)
+DIGEST = "sha256:" + "a" * 64
 
 TODAY = date(2026, 11, 24)
 
 
+def synthetic_entry(**overrides):
+    entry = {
+        "exception_id": "TEST-EXC-001",
+        "image": "application",
+        "digest": DIGEST,
+        "approved_on": "2026-11-24",
+        "expires_on": "2026-12-24",
+        "approved_by": "Project owner",
+        "cve": "CVE-2026-00001",
+        "package": "examplelib",
+        "installed_version": "1.0.0",
+        "severity": "HIGH",
+        "target_type": "debian",
+        "target_path": None,
+        "justification": "Synthetic test exception.",
+        "controls": ["Control one", "Control two"],
+    }
+    entry.update(overrides)
+    return entry
+
+
 @pytest.fixture
 def entries():
-    return policy.load_exceptions(REGISTER)
+    return [
+        synthetic_entry(),
+        synthetic_entry(
+            exception_id="TEST-EXC-002",
+            cve="CVE-2026-00002",
+            target_type="gobinary",
+            target_path="usr/local/bin/helper",
+        ),
+    ]
+
+
+def test_production_register_is_valid_and_empty():
+    assert policy.load_exceptions(REGISTER) == []
 
 
 def make_report(entry, fixed="patched"):
@@ -38,7 +67,7 @@ def make_report(entry, fixed="patched"):
             {
                 "Target": (
                     entry["target_path"]
-                    or "postgres.tar (debian 13.8)"
+                    or "application.tar (debian 13.8)"
                 ),
                 "Type": entry["target_type"],
                 "Vulnerabilities": [
@@ -57,7 +86,7 @@ def make_report(entry, fixed="patched"):
 
 def assess(report, entries, **overrides):
     arguments = {
-        "image": "postgres",
+        "image": "application",
         "digest": DIGEST,
         "today": TODAY,
     }
@@ -71,22 +100,13 @@ def assess(report, entries, **overrides):
     )
 
 
-def test_approved_exception_register(entries):
-    assert len(entries) == 27
-    assert sum(e["severity"] == "CRITICAL" for e in entries) == 2
-    assert sum(e["severity"] == "HIGH" for e in entries) == 25
-    assert all(e["digest"] == DIGEST for e in entries)
+def test_each_approved_exception(entries):
+    for entry in entries:
+        summary = assess(make_report(entry), entries)
 
-
-@pytest.mark.parametrize("index", range(27))
-def test_each_approved_exception(entries, index):
-    report = make_report(entries[index])
-
-    summary = assess(report, entries)
-
-    assert len(summary["accepted"]) == 1
-    assert not summary["blockers"]
-    assert not summary["expired"]
+        assert len(summary["accepted"]) == 1
+        assert not summary["blockers"]
+        assert not summary["expired"]
 
 
 def test_expired_exceptions_block(entries):
@@ -97,7 +117,7 @@ def test_expired_exceptions_block(entries):
     )
 
     assert len(summary["blockers"]) == 1
-    assert len(summary["expired"]) == 27
+    assert len(summary["expired"]) == len(entries)
     assert not summary["accepted"]
 
 
@@ -124,11 +144,11 @@ def test_wrong_image_digest_blocks(entries):
     assert not summary["accepted"]
 
 
-def test_exception_cannot_apply_to_application(entries):
+def test_exception_cannot_apply_to_other_images(entries):
     summary = assess(
         make_report(entries[0]),
         entries,
-        image="application",
+        image="unrelated",
     )
 
     assert len(summary["blockers"]) == 1
@@ -185,17 +205,12 @@ def test_wrong_target_type_blocks(entries):
         ("UNKNOWN", "", "reported"),
     ],
 )
-def test_vulnerability_thresholds(
-    entries, severity, fixed, category
-):
+def test_vulnerability_thresholds(entries, severity, fixed, category):
     entry = deepcopy(entries[0])
     entry["cve"] = "CVE-2099-99999"
     entry["severity"] = severity
 
-    summary = assess(
-        make_report(entry, fixed),
-        entries,
-    )
+    summary = assess(make_report(entry, fixed), entries)
 
     assert len(summary[category]) == 1
     assert not summary["accepted"]

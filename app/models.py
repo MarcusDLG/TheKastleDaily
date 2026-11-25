@@ -1,6 +1,12 @@
-"""Persistence models for the newspaper workflow."""
+"""Persistence models for the newspaper workflow.
 
-from datetime import date, datetime
+SQLite storage: datetimes are naive UTC on disk and timezone-aware UTC in
+Python (UTCDateTime below). Hex artifact checksums are enforced by length
+plus a no-nonhex-characters GLOB check.
+"""
+
+import uuid
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -14,22 +20,41 @@ from sqlalchemy import (
     Numeric,
     Text,
     UniqueConstraint,
-    func,
-    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
-from app.database import SCHEMA
+
+class UTCDateTime(TypeDecorator):
+    """Naive-UTC storage that always returns timezone-aware UTC values."""
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("UTCDateTime requires timezone-aware values")
+        return value.astimezone(UTC).replace(tzinfo=None)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC)
+
+
+HEX64 = "length(epub_sha256) = 64 AND epub_sha256 NOT GLOB '*[^0-9a-f]*'"
 
 
 class Base(DeclarativeBase):
-    metadata = MetaData(schema=SCHEMA)
+    metadata = MetaData()
 
 
 class Record:
-    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), default=lambda: datetime.now(UTC)
     )
 
 
@@ -63,7 +88,7 @@ class IngestionRun(Record, Base):
 
     source_id: Mapped[UUID] = mapped_column(ForeignKey("sources.id"), index=True)
     status: Mapped[str] = mapped_column(Text, server_default="running")
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     error_code: Mapped[str | None] = mapped_column(Text)
 
 
@@ -89,7 +114,7 @@ class ArticleSource(Record, Base):
     external_id: Mapped[str] = mapped_column(Text)
     source_url: Mapped[str] = mapped_column(Text)
     attributed_to: Mapped[str] = mapped_column(Text)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class EditorialRun(Record, Base):
@@ -110,7 +135,7 @@ class EditorialRun(Record, Base):
     input_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
     output_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
     estimated_cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default="0")
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     error_code: Mapped[str | None] = mapped_column(Text)
 
 
@@ -144,14 +169,14 @@ class Edition(Record, Base):
     __tablename__ = "editions"
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'validated', 'failed')", name="edition_status"),
-        CheckConstraint("epub_sha256 ~ '^[0-9a-f]{64}$'", name="edition_checksum_hex"),
+        CheckConstraint(f"epub_sha256 IS NULL OR ({HEX64})", name="edition_checksum_hex"),
         CheckConstraint(
             "status <> 'validated' OR (epub_sha256 IS NOT NULL AND epub_key IS NOT NULL)",
             name="validated_edition_has_artifact",
         ),
     )
 
-    # The scheduler will derive this date in America/New_York.
+    # The scheduler derives this date in America/New_York.
     edition_date: Mapped[date] = mapped_column(unique=True)
     status: Mapped[str] = mapped_column(Text, server_default="draft")
     epub_key: Mapped[str | None] = mapped_column(Text)
@@ -180,7 +205,7 @@ class Delivery(Record, Base):
             "status IN ('pending', 'sending', 'smtp_accepted', 'ambiguous', 'failed')",
             name="delivery_status",
         ),
-        CheckConstraint("epub_sha256 ~ '^[0-9a-f]{64}$'", name="delivery_checksum_hex"),
+        CheckConstraint(HEX64, name="delivery_checksum_hex"),
     )
 
     edition_id: Mapped[UUID] = mapped_column(ForeignKey("editions.id"))
@@ -188,7 +213,7 @@ class Delivery(Record, Base):
     epub_sha256: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, server_default="pending")
     available_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), index=True
+        UTCDateTime(), default=lambda: datetime.now(UTC), index=True
     )
 
 
@@ -205,7 +230,7 @@ class DeliveryAttempt(Record, Base):
 
     delivery_id: Mapped[UUID] = mapped_column(ForeignKey("deliveries.id"))
     attempt_number: Mapped[int]
-    outcome: Mapped[str] = mapped_column(Text, server_default=text("'started'"))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome: Mapped[str] = mapped_column(Text, server_default="started")
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     smtp_message_id: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(Text)

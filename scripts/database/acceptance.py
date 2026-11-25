@@ -1,0 +1,100 @@
+"""SQLite acceptance: migrations, drift, pilot registration, dedupe, persistence.
+
+Creates a disposable database in a temporary directory and exercises the
+full persistence path without Docker or network access. Run directly or via
+scripts/database/acceptance.sh.
+"""
+
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+
+def run_alembic(database: Path, *args: str) -> None:
+    env = os.environ.copy() | {"KASTLE_DB": str(database)}
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"alembic {' '.join(args)} failed:\n{result.stderr}")
+
+
+FEED = b"""<rss version="2.0"><channel><item>
+<guid>acceptance-1</guid><link>https://example.invalid/story</link>
+<title>Acceptance story</title><pubDate>Tue, 24 Nov 2026 12:15:00 -0500</pubDate>
+</item></channel></rss>"""
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as scratch:
+        database = Path(scratch) / "kastle.db"
+
+        # Migration idempotency and zero model drift.
+        run_alembic(database, "upgrade", "head")
+        run_alembic(database, "upgrade", "head")
+        run_alembic(database, "check")
+
+        os.environ["KASTLE_DB"] = str(database)
+        from sqlalchemy import select
+
+        from app.database import database_engine, session_factory
+        from app.ingest import ingest_sources
+        from app.models import ArticleSource, Source
+        from app.pilot import register_sources
+        from app.rss import FeedResponse
+
+        engine = database_engine()
+        try:
+            with engine.begin() as connection:
+                first = register_sources(connection)
+                assert len(first) == 6, first
+                second = register_sources(connection)
+                assert second == [], "pilot registration must be idempotent"
+
+            def stub_fetch(endpoint, etag, last_modified):
+                if etag == "v1":
+                    return FeedResponse(None, "v1", None)
+                return FeedResponse(FEED, "v1", None)
+
+            sessions = session_factory(engine)
+            results = ingest_sources(sessions, fetch=stub_fetch)
+            assert len(results) == 6, results
+            with sessions() as session:
+                rows = session.execute(
+                    select(ArticleSource.external_id).where(
+                        ArticleSource.external_id == "acceptance-1"
+                    )
+                ).all()
+                assert len(rows) == 6, "one observation per source for the shared guid"
+
+            # Conditional refetch (304) stores nothing new.
+            results = ingest_sources(sessions, fetch=stub_fetch)
+            with sessions() as session:
+                total = session.execute(select(ArticleSource.id)).all()
+                assert len(total) == 6, "a not-modified pass must not duplicate rows"
+
+            # Provenance survives an engine restart.
+            engine.dispose()
+            engine = database_engine()
+            sessions = session_factory(engine)
+            with sessions() as session:
+                publishers = session.execute(select(Source.publisher)).all()
+                assert len(publishers) == 6, publishers
+        finally:
+            engine.dispose()
+
+    print("SQLite acceptance passed: migrations, drift, pilot, dedupe, persistence.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,6 +1,6 @@
-"""Register the personal RSS pilot feeds using the schema owner's credentials."""
+"""Register the personal RSS pilot feeds."""
 
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 
 from app.database import database_engine
 from app.models import Source
@@ -66,7 +66,7 @@ def register_sources(connection):
 
 
 def main():
-    engine = database_engine(migration=True)
+    engine = database_engine()
     try:
         with engine.begin() as connection:
             added = register_sources(connection)

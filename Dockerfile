@@ -7,13 +7,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt .
 
+# CVE-2026-124851: libzstd1 fix (deb13u1) predates the pinned base rebuild.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libzstd1 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN python -m pip install \
     --no-cache-dir \
     --require-hashes \
     --only-binary=:all: \
     -r requirements.txt \
     && python -m pip check \
-    && useradd --system --uid 10001 appuser
+    && useradd --system --uid 10001 appuser \
+    && install -d -o appuser -g appuser /data
 
 COPY app ./app
 COPY config/editorial.yaml ./config/editorial.yaml
@@ -22,6 +28,4 @@ COPY migrations ./migrations
 
 USER 10001
 
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.schedule"]
