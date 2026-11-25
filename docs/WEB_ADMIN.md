@@ -51,10 +51,14 @@ admin:
 
 ## Phases
 
-**Phase 1 — read-only dashboard.** Editions with status/SHA, drafting
-runs with `error_detail` block reasons, feed health (last ingest status
-per source, failure streaks), delivery state per edition. Zero write
-risk; the `stories_blocked` mystery of 2026-11-25 becomes a page view.
+**Phase 1 — read-only dashboard. Implemented.** Editions with
+status/SHA, drafting runs with `error_detail` block reasons decoded,
+feed health (last ingest status per source, failure streaks), delivery
+state per edition, and 24h article stats. stdlib `http.server` — zero
+new dependencies. The service binds the container's own interface
+(narrower than a wildcard bind) and `docker compose config` publishes
+`127.0.0.1:8080` only; raise it with
+`docker compose --profile admin up -d admin`.
 
 **Phase 2 — feed management.** `sources` CRUD: add a feed (endpoint +
 publisher + category), flip approval state (`pending`/`approved`/
