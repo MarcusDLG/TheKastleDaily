@@ -54,6 +54,9 @@ jobs:
       - name: Regression tests
         run: python -m pytest --junitxml=artifacts/junit.xml
 
+      - name: Build and validate a fixture EPUB
+        run: bash scripts/epub/acceptance.sh
+
       - name: Audit production dependencies
         run: pip-audit --require-hashes -r requirements.txt
 
