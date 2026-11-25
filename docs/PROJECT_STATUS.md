@@ -22,14 +22,14 @@ Pull request: #1
 
 ## M00-A Security hardening
 
-- Automated regression: 71/71 passed.
+- Automated regression: 73/73 passed after the SQLite simplification.
 - Initial application acceptance: 10/10 passed.
 - Database hardening acceptance: 11/11 passed.
 - Gitleaks credential findings: zero.
 - Bandit application findings: zero.
 - Python dependency audit findings: zero.
 - Unaccepted container blockers: zero at assessment.
-- Approved container vulnerability exceptions: 27.
+- Approved container vulnerability exceptions: 27 at M00; register now empty (PostgreSQL image removed).
 - Security reports: 6/6 validated locally.
 - Remote CI runs #9 and #10 passed.
 - Validated implementation commit: 21698b2.
@@ -102,13 +102,13 @@ See INTEGRATIONS.md for implementation constraints.
 | ID | Requirement | Required disposition |
 |---|---|---|
 | POST-MVP-001 | NAS backup and disaster recovery | Owner-approved post-MVP remediation |
-| M00-EXC-001 | PostgreSQL libxml2 exception | Review before 2026-12-24 UTC |
-| M00-EXC-002 | PostgreSQL gosu exceptions | Review before 2026-12-24 UTC |
+| M00-EXC-001 | PostgreSQL libxml2 exception | Closed: PostgreSQL image removed |
+| M00-EXC-002 | PostgreSQL gosu exceptions | Closed: PostgreSQL image removed |
 | M00-GOV-003 | GHCR access verification | First authorized publication |
 | M00-C-OPEN | Formal EPUBCheck validation | Before production EPUB delivery |
 | M00-D-OPEN | Live integration qualification | During relevant implementation milestones |
 | NAS-PERF | Concurrent workload benchmarking | Before production acceptance |
-| NAS-DB | Existing database volume hardening | Before reuse of any existing volume |
+| NAS-DB | Existing database volume hardening | Obsolete: no database volume is reused |
 | PLAN-REV4 | Full Master Execution Plan reconciliation | Outstanding |
 
 Additional security findings are maintained in SECURITY.md.
@@ -118,11 +118,11 @@ Additional security findings are maintained in SECURITY.md.
 | Workstream | Status |
 |---|---|
 | M00 initialization and feasibility | Accepted |
-| M02 persistence and migrations | See the [M02 plan and verification status](M02.md) |
+| M02 persistence and migrations | Superseded: SQLite worker runtime in progress (see [M02](M02.md)) |
 | Source ingestion | Planned |
 | Editorial engine | Planned |
 | EPUB generation and delivery | Planned |
-| Scheduling and observability | Planned |
+| Scheduling and observability | In progress (worker loop and health heartbeat implemented) |
 | Web administration | Planned |
 | MCP integration | Planned |
 | NAS deployment and recovery | Planned |
@@ -139,4 +139,4 @@ Explicit project owner approval is required.
 MuralBook was inspected read-only for reusable architectural
 patterns. No MuralBook resources or credentials are shared.
 
-Devin is not required.
+Devin implements the core loop in reviewable milestone PRs; the project owner reviews and merges.

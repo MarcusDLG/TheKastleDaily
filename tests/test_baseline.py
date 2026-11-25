@@ -1,23 +1,8 @@
 from pathlib import Path
 
 import yaml
-from fastapi.testclient import TestClient
-
-from app.main import app
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_health():
-    response = TestClient(app).get('/healthz')
-    assert response.status_code == 200
-    assert response.json() == {'status': 'ok'}
-
-
-def test_admin_not_exposed():
-    client = TestClient(app)
-    for path in ('/docs', '/redoc', '/openapi.json', '/admin', '/mcp'):
-        assert client.get(path).status_code == 404
 
 
 def test_editorial_baseline():
@@ -31,12 +16,13 @@ def test_editorial_baseline():
     assert config['timezone'] == 'America/New_York'
 
 
-def test_network_isolation():
+def test_worker_isolation():
     compose = yaml.safe_load((ROOT / 'compose.yaml').read_text())
-    api, db = (compose['services'][key] for key in ('api', 'db'))
-    assert not db.get('ports')
-    assert compose['networks']['database']['internal'] is True
-    assert api['ports'] == ['127.0.0.1:8765:8000']
-    assert api['read_only'] is True
-    assert api['cap_drop'] == ['ALL']
-    assert all(not s.get('privileged') for s in (api, db))
+    worker = compose['services']['worker']
+    assert len(compose['services']) == 1
+    assert not worker.get('ports')
+    assert worker['read_only'] is True
+    assert worker['cap_drop'] == ['ALL']
+    assert 'no-new-privileges:true' in worker['security_opt']
+    assert worker.get('privileged') is not True
+    assert compose.get('networks') is None

@@ -15,60 +15,30 @@ def load_yaml(path):
     )
 
 
-def test_postgres_scram_authentication():
+def test_no_credentials_in_compose_environment():
     compose = load_yaml("compose.yaml")
-    args = compose["services"]["db"]["environment"][
-        "POSTGRES_INITDB_ARGS"
-    ]
+    worker_env = compose["services"]["worker"].get("environment", {})
 
-    assert "--auth-local=scram-sha-256" in args
-    assert "--auth-host=scram-sha-256" in args
+    for value in worker_env.values():
+        assert not re.search(r"\$\{[A-Z_]+:\?", str(value))
+        assert not re.search(r"\$\{[A-Z_]+\}", str(value))
 
 
-def test_postgres_data_checksums():
+def test_no_database_service_or_published_ports():
     compose = load_yaml("compose.yaml")
-    args = compose["services"]["db"]["environment"][
-        "POSTGRES_INITDB_ARGS"
-    ]
 
-    assert "--data-checksums" in args
-
-
-def test_postgres_authenticated_healthcheck():
-    compose = load_yaml("compose.yaml")
-    healthcheck = compose["services"]["db"]["healthcheck"]["test"]
-    command = " ".join(healthcheck)
-
-    assert "PGPASSWORD=" in command
-    assert "$$POSTGRES_PASSWORD" in command
-    assert "psql" in command
-    assert "127.0.0.1" in command
-    assert "SELECT 1" in command
-    assert "ON_ERROR_STOP=1" in command
-
-
-def test_postgres_password_required():
-    compose = load_yaml("compose.yaml")
-    password = compose["services"]["db"]["environment"][
-        "POSTGRES_PASSWORD"
-    ]
-
-    assert password.startswith("${POSTGRES_PASSWORD:?")
+    assert set(compose["services"]) == {"worker"}
+    for service in compose["services"].values():
+        assert not service.get("ports")
 
 
 def test_container_images_digest_pinned():
     dockerfile = (ROOT / "Dockerfile").read_text()
-    compose = load_yaml("compose.yaml")
 
     assert re.search(
         r"^FROM python:[^\s]+@sha256:[0-9a-f]{64}$",
         dockerfile,
         re.MULTILINE,
-    )
-
-    assert re.fullmatch(
-        r"postgres:[^\s]+@sha256:[0-9a-f]{64}",
-        compose["services"]["db"]["image"],
     )
 
 

@@ -62,11 +62,11 @@ jobs:
       - name: Audit development dependencies
         run: pip-audit --require-hashes -r requirements-dev.txt
 
-      - name: PostgreSQL integration and migration regression
+      - name: SQLite persistence and migration regression
         run: bash scripts/database/acceptance.sh
 
       - name: Validate Docker Compose
-        run: POSTGRES_PASSWORD=ci-only-placeholder docker compose config --quiet
+        run: docker compose config --quiet
 
       - name: Validate AMD64 production build
         run: docker build --platform linux/amd64 -t kastle-daily:validation .

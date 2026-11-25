@@ -7,7 +7,7 @@ The implementation starts from post-M02 main at `d9b8e69`.
 | Registry | Limit fetching to approved RSS sources | Keep publisher and licensing decisions traceable | Record the direct feed URL, publisher, editorial category and licensing disposition in the M02 source registry | Pending and disabled sources are skipped |
 | Fetch and parse | Retrieve RSS 2.0 metadata | Discover stories and preserve attribution | Run the one-shot ingestion command as the runtime role | HTTPS to public addresses, bounded reads, no redirects, safe XML parsing and conditional requests |
 | Persist | Track articles, provenance and run outcomes | Handle repeated fetches without duplicate stories | Save normalized URLs, external IDs, publication times and source references | Duplicate records are avoided and a failed feed leaves other feeds eligible |
-| Verify | Qualify the ingestion path | Keep CI independent of publisher uptime | Run the regression and disposable PostgreSQL checks | Fixtures cover repeated items, conditional responses, malformed XML and source failure isolation |
+| Verify | Qualify the ingestion path | Keep CI independent of publisher uptime | Run the regression and SQLite persistence checks | Fixtures cover repeated items, conditional responses, malformed XML and source failure isolation |
 
 ## Personal pilot registry
 
@@ -28,20 +28,28 @@ images, send data to a model, or deliver a digest.
 
 ## Run locally
 
-Complete the [M02 database startup](M02.md), then run:
+No Docker or secrets are required. Run the full pass once (migrations,
+registration, ingestion and selection):
 
 ```sh
-docker compose build api
-docker compose run --rm migrate python -m app.pilot
-docker compose run --rm ingest
+python -m app.schedule --once
 ```
 
-The registration command uses the schema owner's credentials. Run it
-again to add any missing pilot sources. Use the final HTTPS feed URL
-when registering other sources because the importer rejects redirects.
-The ingestion command reports
+or stage by stage:
+
+```sh
+python -m alembic upgrade head
+python -m app.pilot
+python -m app.ingest
+python -m app.selection
+```
+
+The database defaults to `./data/kastle.db` (override with `KASTLE_DB`).
+Registration is idempotent: run it again to add any missing pilot sources.
+Use the final HTTPS feed URL when registering other sources because the
+importer rejects redirects. The ingestion command reports
 source IDs and outcomes and exits nonzero if a feed failed. Inspect the
-`newspaper.ingestion_runs` records for failure codes. A subsequent pass
+`ingestion_runs` records for failure codes. A subsequent pass
 can retry failed sources without duplicating successful items.
 
 ## Local evidence

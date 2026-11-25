@@ -12,8 +12,8 @@
 
 - Treat the Synology NAS as internet-connected infrastructure.
 - Do not modify existing NAS services.
-- Keep PostgreSQL inaccessible from external networks.
-- Bind the initial application API to loopback only.
+- Run no listening network service; publish no ports.
+- Keep the database file on local volume storage only.
 - Require authenticated access before exposing administrative interfaces.
 - Apply least privilege to containers, database roles and credentials.
 - Keep secrets outside source control.
@@ -33,28 +33,17 @@ The application container uses:
 - Hash-verified, wheel-only Python dependency installation.
 - No development dependencies in the production image.
 
-PostgreSQL uses:
+Persistence uses:
 
-- Digest-pinned PostgreSQL 17 image.
-- Isolated internal Docker network.
-- No published database port.
-- SCRAM-SHA-256 local and host authentication.
-- Data checksums enabled during initialization.
-- Authenticated SQL health checks.
-- Persistent database storage.
-- Explicit CPU and memory limits.
+- SQLite in a single file on a named volume (`/data/kastle.db`).
+- WAL journal mode, foreign keys enforced, bounded busy timeout.
+- One writer (the worker container); no network listener of any kind.
+- No database credentials exist: file-system permissions are the
+  access boundary, and the container runs non-root with a read-only
+  root filesystem.
 
-Database initialization settings apply to newly initialized
-volumes. Existing volumes must be assessed separately.
-
-The API connects as `kastle_app` using its own credential.
-The runtime role can read the source registry and update its HTTP cache
-validators. It can write workflow records with the table grants recorded
-in the Alembic revision. Provenance and evidence are append-only for that
-role. It has no delete privileges, database or schema creation privileges,
-or access to the Alembic version table. Provisioning uses a separate
-bootstrap login, and schema updates use a separate migration login.
-See [M02 database operations](M02.md).
+The PostgreSQL role model (bootstrap/migrator/runtime logins) was
+removed with the database engine. See [Architecture](ARCHITECTURE.md).
 
 ## 3. Software supply chain
 
@@ -105,7 +94,7 @@ See [M02 database operations](M02.md).
 - Version: 0.76.2.
 - Digest-pinned scanner container.
 - Downloads vulnerability data before offline image scanning.
-- Scans exported AMD64 application and PostgreSQL image archives.
+- Scans the exported AMD64 application image archive.
 - Does not require access to the Docker socket.
 - Evaluates findings using the repository security policy.
 - Produces raw vulnerability and evaluated policy JSON reports.
@@ -140,6 +129,11 @@ on which an exception is invalid.
 No blanket vulnerability suppression is permitted.
 
 ## 6. Approved security exceptions
+
+**Closed.** Both exceptions below applied only to the PostgreSQL image,
+which is no longer part of the deployment. The exception register is
+empty; the evaluator policy is regression-tested with synthetic entries.
+The original text is retained for the record.
 
 Approved by the project owner on 2026-11-24.
 
@@ -242,7 +236,7 @@ Assessment date: 2026-11-24.
 | Development dependency vulnerabilities | 0 |
 | Gitleaks history findings | 0 |
 | Gitleaks working-tree findings | 0 |
-| Approved PostgreSQL findings matched | 27/27 |
+| Approved PostgreSQL findings matched | 27/27 (historical; register now empty) |
 | Unaccepted container blockers | 0 |
 | Expired exceptions | 0 |
 | Security JSON reports | 6/6 valid |
@@ -271,8 +265,8 @@ Results are time-dependent and must be reassessed by subsequent scans.
 | M00-SEC-003 | AWS synthetic credential detection discrepancy | Open; review deferred recommendation |
 | M00-SEC-004 | Scanner configuration bypass | Local mitigation and remote CI execution validated |
 | M00-SEC-005 | Application high findings without fixes | Monitor |
-| M00-SEC-006 | PostgreSQL OS vulnerabilities | Temporary exception and monitoring |
-| M00-SEC-007 | Embedded gosu vulnerabilities | Temporary exception |
+| M00-SEC-006 | PostgreSQL OS vulnerabilities | Closed: PostgreSQL image removed |
+| M00-SEC-007 | Embedded gosu vulnerabilities | Closed: PostgreSQL image removed |
 | M00-QA-001 | Synthetic credential fixture regression | Resolved for general acceptance |
 | M00-QA-002 | Snapshot scan inconsistency | Mitigated; root cause unconfirmed |
 | M00-QA-003 | Invalid Gitleaks JSON report | Corrected and locally validated |
