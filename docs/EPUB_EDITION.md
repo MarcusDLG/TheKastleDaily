@@ -54,5 +54,5 @@ is recorded as `failed` so the scheduler's bounded attempts can retry.
 The pipeline `validated` status means the renderer's contract checks
 passed; EPUBCheck 5.4.0 remains a CI and acceptance gate on the same
 deterministic renderer rather than a per-edition worker step, because
-the worker image carries no Java runtime. The delivery outbox and SMTP
-submission remain separate milestones.
+the worker image carries no Java runtime. Validated editions feed the
+delivery outbox; see [DELIVERY.md](DELIVERY.md).

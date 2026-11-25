@@ -10,8 +10,8 @@ sleeps most of the day, wakes every fifteen minutes, and once the
 local edition time passes in America/New_York it executes the
 pipeline for that calendar day: Alembic migrations, source
 registration, RSS/Atom ingestion, editorial selection and evidence
-drafting, and the EPUB edition build, with delivery as a later
-milestone. One edition
+drafting, the EPUB edition build, and outbox delivery to Kindle over
+SMTP. One edition
 per calendar day is guaranteed by the edition-date key and by the
 worker's run-state file, with at most three attempts per edition.
 `python -m app.schedule --once` runs the same pipeline immediately

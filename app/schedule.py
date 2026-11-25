@@ -17,6 +17,7 @@ import json
 import time
 from datetime import UTC, date, datetime, time as dtime
 from pathlib import Path
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -65,13 +66,15 @@ def edition_due(now_utc: datetime, last_edition: str | None, zone, at) -> str | 
 
 
 def run_pipeline() -> None:
-    """Migrate, register sources, ingest, select, draft, and build the edition."""
+    """Migrate, register, ingest, select, draft, build, and deliver the edition."""
     from alembic.config import main as alembic_main
 
     from app.build import build_edition, editions_dir, latest_succeeded_run
     from app.database import database_engine, session_factory
+    from app.delivery import destination, drain_safely, ensure_delivery
     from app.drafting import run_drafting
     from app.ingest import ingest_sources
+    from app.models import Edition
     from app.pilot import register_sources
     from app.selection import build_plan
 
@@ -97,9 +100,29 @@ def run_pipeline() -> None:
             if run is not None:
                 edition = build_edition(session, run, editions_dir())
                 session.commit()
+        delivery = {"status": "skipped", "reason": "not_applicable"}
+        dest = destination()
+        if (
+            dest is not None
+            and edition.get("edition_id")
+            and edition.get("status") in {"validated", "already_validated"}
+        ):
+            with session_factory(engine)() as session:
+                row = session.get(Edition, UUID(edition["edition_id"]))
+                if row is not None:
+                    _, created = ensure_delivery(session, row, dest)
+                    session.commit()
+                    delivery = {"status": "queued" if created else "exists"}
+        outbox = drain_safely(engine)
         print(
             json.dumps(
-                {"selection": plan, "drafting": drafting, "edition": edition},
+                {
+                    "selection": plan,
+                    "drafting": drafting,
+                    "edition": edition,
+                    "delivery": delivery,
+                    "outbox": outbox,
+                },
                 default=str,
                 indent=2,
             )
@@ -118,6 +141,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     zone, at = edition_config()
     path = state_path()
+
+    from app.delivery import drain_safely
 
     if args.once:
         run_pipeline()
@@ -151,6 +176,8 @@ def main(argv=None) -> int:
                     )
         else:
             write_state(path)
+        # Due deliveries retry on every wake, not just edition days.
+        drain_safely()
         time.sleep(POLL_CAP_SECONDS)
 
 
