@@ -1,4 +1,5 @@
 alembic==1.20.1
 sqlalchemy==2.1.9
 feedparser==6.0.14
+trafilatura==2.3.1
 PyYAML==6.0.4

@@ -84,6 +84,7 @@ Run the SQLite persistence and ingestion acceptance checks with
 - [M02 plan and database runbook](docs/M02.md) (superseded)
 - [RSS ingestion pilot](docs/RSS_INGESTION.md)
 - [Editorial selection](docs/EDITORIAL_SELECTION.md)
+- [Editorial drafting](docs/EDITORIAL_DRAFTING.md)
 - [EPUB edition build](docs/EPUB_EDITION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security](docs/SECURITY.md)

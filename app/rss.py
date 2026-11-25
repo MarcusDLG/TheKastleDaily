@@ -84,6 +84,24 @@ class _FeedConnection(HTTPSConnection):
         raise FeedError("connection_failure") from error
 
 
+def _read_body(response) -> bytes:
+    """Read a bounded, uncompressed response body within the fetch timeout."""
+    if response.getheader("Content-Encoding", "identity").lower() != "identity":
+        raise FeedError("unsupported_encoding")
+    body = bytearray()
+    deadline = monotonic() + TIMEOUT
+    while len(body) <= MAX_BYTES:
+        if monotonic() > deadline:
+            raise FeedError("timeout")
+        chunk = response.read1(min(65536, MAX_BYTES + 1 - len(body)))
+        if not chunk:
+            if response.length:
+                raise FeedError("response_truncated")
+            return bytes(body)
+        body.extend(chunk)
+    raise FeedError("response_too_large")
+
+
 def _validator(value: str | None) -> str | None:
     if value and len(value) <= 1024 and all(32 <= ord(char) <= 126 for char in value):
         return value
@@ -120,20 +138,9 @@ def fetch_feed(
                 )
             if response.status != 200:
                 raise FeedError(f"http_{response.status}")
-            if response.getheader("Content-Encoding", "identity").lower() != "identity":
-                raise FeedError("unsupported_encoding")
-            body = bytearray()
-            deadline = monotonic() + TIMEOUT
-            while len(body) <= MAX_BYTES:
-                if monotonic() > deadline:
-                    raise FeedError("timeout")
-                chunk = response.read1(min(65536, MAX_BYTES + 1 - len(body)))
-                if not chunk:
-                    if response.length:
-                        raise FeedError("response_truncated")
-                    return FeedResponse(bytes(body), current_etag, current_modified)
-                body.extend(chunk)
-            raise FeedError("response_too_large")
+            return FeedResponse(
+                _read_body(response), current_etag, current_modified
+            )
     except TimeoutError as exc:
         raise FeedError("timeout") from exc
     except (OSError, HTTPException, ValueError) as exc:

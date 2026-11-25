@@ -44,7 +44,11 @@ class UTCDateTime(TypeDecorator):
         return value.replace(tzinfo=UTC)
 
 
-HEX64 = "length(epub_sha256) = 64 AND epub_sha256 NOT GLOB '*[^0-9a-f]*'"
+def _hex64(column):
+    return f"length({column}) = 64 AND {column} NOT GLOB '*[^0-9a-f]*'"
+
+
+HEX64 = _hex64("epub_sha256")
 
 
 class Base(DeclarativeBase):
@@ -163,6 +167,29 @@ class EditorialEvidence(Base):
         ForeignKey("article_sources.id"), primary_key=True, index=True
     )
     evidence_note: Mapped[str] = mapped_column(Text)
+
+
+class EvidenceAcquisition(Record, Base):
+    __tablename__ = "evidence_acquisitions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('extracted', 'failed')", name="evidence_status"
+        ),
+        CheckConstraint(
+            f"content_sha256 IS NULL OR ({_hex64('content_sha256')})",
+            name="evidence_checksum_hex",
+        ),
+    )
+
+    article_id: Mapped[UUID] = mapped_column(
+        ForeignKey("articles.id"), unique=True
+    )
+    url: Mapped[str] = mapped_column(Text)
+    fetched_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    status: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str | None] = mapped_column(Text)
+    extracted_text: Mapped[str | None] = mapped_column(Text)
+    content_sha256: Mapped[str | None] = mapped_column(Text)
 
 
 class Edition(Record, Base):

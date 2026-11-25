@@ -65,10 +65,11 @@ def edition_due(now_utc: datetime, last_edition: str | None, zone, at) -> str | 
 
 
 def run_pipeline() -> None:
-    """Migrate, register sources, ingest, and select today's plan."""
+    """Migrate, register sources, ingest, select, and draft today's edition."""
     from alembic.config import main as alembic_main
 
     from app.database import database_engine, session_factory
+    from app.drafting import run_drafting
     from app.ingest import ingest_sources
     from app.pilot import register_sources
     from app.selection import build_plan
@@ -79,7 +80,14 @@ def run_pipeline() -> None:
         with engine.begin() as connection:
             register_sources(connection)
         ingest_sources(session_factory(engine))
-        print(json.dumps(build_plan(engine=engine), default=str, indent=2))
+        plan = build_plan(engine=engine)
+        if plan["coverage_floor_met"]:
+            with session_factory(engine)() as session:
+                drafting = run_drafting(session, plan)
+                session.commit()
+        else:
+            drafting = {"status": "skipped", "reason": "coverage_floor_unmet"}
+        print(json.dumps({"selection": plan, "drafting": drafting}, default=str, indent=2))
     finally:
         engine.dispose()
 
