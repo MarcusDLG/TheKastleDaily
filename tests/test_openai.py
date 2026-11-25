@@ -170,6 +170,47 @@ def test_repair_failure_still_raises():
     assert len(transport.calls) == 2
 
 
+def short_paragraph_response():
+    draft = DRAFT | {"paragraphs": ["too short", "also short"]}
+    return {
+        "choices": [{"message": {"content": json.dumps(draft)}}],
+        "usage": {},
+    }
+
+
+def test_contract_rejection_triggers_targeted_repair():
+    transport = transport_sequence([short_paragraph_response(), ok_response()])
+    generator = OpenAIGenerator("k", "gpt-5-mini", transport=transport)
+
+    def check(output):
+        if all(len(p) >= 80 for p in output.paragraphs):
+            return None
+        return "Draft paragraph length is out of bounds"
+
+    output = generator.generate(STORY, EVIDENCE, check=check)
+    assert output.headline == DRAFT["headline"]
+    assert len(transport.calls) == 2
+    repair = transport.calls[1]["messages"][-1]
+    assert "Draft paragraph length is out of bounds" in repair["content"]
+    # The rejected draft is echoed back for the model to correct.
+    echoed = transport.calls[1]["messages"][-2]
+    assert json.loads(echoed["content"])["paragraphs"] == ["too short", "also short"]
+
+
+def test_contract_rejection_persists_raises_reason():
+    transport = transport_sequence(
+        [short_paragraph_response(), short_paragraph_response()]
+    )
+    generator = OpenAIGenerator("k", "gpt-5-mini", transport=transport)
+
+    def check(output):
+        return "Draft paragraph length is out of bounds"
+
+    with pytest.raises(ValueError, match="paragraph length"):
+        generator.generate(STORY, EVIDENCE, check=check)
+    assert len(transport.calls) == 2
+
+
 def test_reasoning_effort_in_payload():
     transport = transport_returning(ok_response())
     OpenAIGenerator("k", "gpt-5-mini", transport=transport).generate(STORY, EVIDENCE)
@@ -233,36 +274,41 @@ def sessions():
     engine.dispose()
 
 
+def seed_story(session):
+    source = Source(
+        kind="rss",
+        endpoint="https://example.com/feed",
+        publisher="Fixture Press",
+        category="technology_ai",
+        approval="approved",
+        licensing_note="Fixture",
+    )
+    session.add(source)
+    session.flush()
+    ingest = IngestionRun(source_id=source.id, status="succeeded")
+    session.add(ingest)
+    session.flush()
+    article = Article(canonical_url=STORY["url"], title=STORY["title"])
+    session.add(article)
+    session.flush()
+    session.add(
+        ArticleSource(
+            article_id=article.id,
+            source_id=source.id,
+            ingestion_run_id=ingest.id,
+            external_id="1",
+            source_url=STORY["url"],
+            attributed_to="Fixture Press",
+            published_at=datetime(2026, 11, 24, 12, tzinfo=UTC),
+        )
+    )
+    session.flush()
+    return article
+
+
 def test_run_drafting_records_model_and_usage(sessions):
     with sessions() as session:
-        source = Source(
-            kind="rss",
-            endpoint="https://example.com/feed",
-            publisher="Fixture Press",
-            category="technology_ai",
-            approval="approved",
-            licensing_note="Fixture",
-        )
-        session.add(source)
-        session.flush()
-        ingest = IngestionRun(source_id=source.id, status="succeeded")
-        session.add(ingest)
-        session.flush()
-        article = Article(canonical_url=STORY["url"], title=STORY["title"])
-        session.add(article)
-        session.flush()
-        session.add(
-            ArticleSource(
-                article_id=article.id,
-                source_id=source.id,
-                ingestion_run_id=ingest.id,
-                external_id="1",
-                source_url=STORY["url"],
-                attributed_to="Fixture Press",
-                published_at=datetime(2026, 11, 24, 12, tzinfo=UTC),
-            )
-        )
-        session.flush()
+        article = seed_story(session)
 
         plan = {
             "edition_date": "2026-11-25",
@@ -295,36 +341,35 @@ def test_run_drafting_records_model_and_usage(sessions):
         assert run.estimated_cost_usd > 0
 
 
+def test_run_drafting_repairs_contract_violation(sessions):
+    with sessions() as session:
+        article = seed_story(session)
+        plan = {
+            "edition_date": "2026-11-25",
+            "coverage_floor_met": True,
+            "stories": [STORY | {"article_id": article.id}],
+        }
+        transport = transport_sequence(
+            [short_paragraph_response(), ok_response()]
+        )
+        generator = OpenAIGenerator("k", "gpt-5-mini", transport=transport)
+        result = run_drafting(
+            session,
+            plan,
+            fetch=lambda url: b"<html>ok</html>",
+            extract=lambda body: EVIDENCE,
+            generator=generator,
+        )
+        assert result["drafted"] == 1
+        assert result["blocked"] == 0
+        assert len(transport.calls) == 2
+        run = session.scalar(select(EditorialRun))
+        assert run.error_code is None
+
+
 def test_run_drafting_records_block_reasons(sessions):
     with sessions() as session:
-        source = Source(
-            kind="rss",
-            endpoint="https://example.com/feed",
-            publisher="Fixture Press",
-            category="technology_ai",
-            approval="approved",
-            licensing_note="Fixture",
-        )
-        session.add(source)
-        session.flush()
-        ingest = IngestionRun(source_id=source.id, status="succeeded")
-        session.add(ingest)
-        session.flush()
-        article = Article(canonical_url=STORY["url"], title=STORY["title"])
-        session.add(article)
-        session.flush()
-        session.add(
-            ArticleSource(
-                article_id=article.id,
-                source_id=source.id,
-                ingestion_run_id=ingest.id,
-                external_id="1",
-                source_url=STORY["url"],
-                attributed_to="Fixture Press",
-                published_at=datetime(2026, 11, 24, 12, tzinfo=UTC),
-            )
-        )
-        session.flush()
+        article = seed_story(session)
 
         plan = {
             "edition_date": "2026-11-25",
