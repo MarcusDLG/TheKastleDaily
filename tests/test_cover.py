@@ -1,3 +1,4 @@
+import io
 from collections import Counter
 from datetime import UTC, date, datetime
 from uuid import uuid4
@@ -129,6 +130,34 @@ def test_render_cover_is_deterministic(tmp_path):
     assert other != first
 
 
+def test_render_cover_composites_lead_photo(tmp_path):
+    lead = tmp_path / "lead.jpg"
+    Image.linear_gradient("L").resize((900, 500)).save(lead, format="JPEG")
+    with_photo = render_cover(
+        EDITION_DATE,
+        tmp_path / "with.png",
+        photo=lead,
+        caption="Race leaders at turn four",
+    )
+    without = render_cover(EDITION_DATE, tmp_path / "without.png")
+    assert with_photo.read_bytes() != without.read_bytes()
+    with Image.open(with_photo) as image:
+        assert image.mode == "L"
+        assert image.size == (WIDTH, HEIGHT)
+        # The hero box carries photo ink, not the paper background.
+        assert image.getpixel((WIDTH // 2, 960)) != 246
+
+
+def test_render_cover_ignores_unreadable_photo(tmp_path):
+    bad = tmp_path / "bad.jpg"
+    bad.write_bytes(b"not really a jpeg")
+    target = render_cover(EDITION_DATE, tmp_path / "cover.png", photo=bad)
+    assert (
+        target.read_bytes()
+        == render_cover(EDITION_DATE, tmp_path / "plain.png").read_bytes()
+    )
+
+
 def test_build_embeds_generated_cover(sessions, tmp_path):
     with sessions() as session:
         other = seed(session, "motorsport", "Race report")
@@ -156,3 +185,35 @@ def test_build_embeds_generated_cover(sessions, tmp_path):
             assert 'properties="cover-image"' in package
             cover_page = archive.read("EPUB/cover.xhtml").decode()
             assert "cover.png" in cover_page
+
+
+def test_build_puts_lead_story_photo_on_cover(sessions, tmp_path, monkeypatch):
+    monkeypatch.setattr("app.evidence.photos_dir", lambda: tmp_path / "photos")
+    jpeg = io.BytesIO()
+    Image.linear_gradient("L").resize((640, 400)).save(jpeg, format="JPEG")
+    page = (
+        b'<html><head>'
+        b'<meta property="og:image" content="https://cdn.example.com/lead.jpg">'
+        b"</head><body>story</body></html>"
+    )
+    with sessions() as session:
+        lead_story = seed(session, "motorsport", "Race report")
+        other = seed(session, "sim_racing", "League recap")
+        run_drafting(
+            session,
+            plan_for(
+                (lead_story, "motorsport", False),
+                (other, "sim_racing", True),
+            ),
+            fetch=lambda url: page,
+            extract=extract_stub(),
+            fetch_image=lambda url: jpeg.getvalue(),
+        )
+        run = session.scalar(
+            select(EditorialRun).where(EditorialRun.status == "succeeded")
+        )
+
+        result = build_edition(session, run, tmp_path)
+        assert result["status"] == "validated"
+        with Image.open(tmp_path / "cover-2026-11-25.png") as image:
+            assert image.getpixel((WIDTH // 2, 960)) != 246

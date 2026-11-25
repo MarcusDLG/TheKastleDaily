@@ -122,7 +122,16 @@ def build_edition(session, run, directory) -> dict:
         plan = _render_plan(json.loads(run.plan), drafts)
         directory.mkdir(parents=True, exist_ok=True)
         cover_name = f"cover-{run.edition_date.isoformat()}.png"
-        render_cover(run.edition_date, directory / cover_name)
+        lead = next(
+            (story for story in drafts["stories"] if story.get("photo")),
+            None,
+        )
+        render_cover(
+            run.edition_date,
+            directory / cover_name,
+            photo=directory / lead["photo"]["file"] if lead else None,
+            caption=lead["headline"] if lead else None,
+        )
         render_epub(plan, drafts | {"cover": cover_name}, directory, scratch)
         checksum = hashlib.sha256(scratch.read_bytes()).hexdigest()
         scratch.replace(target)

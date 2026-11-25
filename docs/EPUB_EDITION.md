@@ -58,11 +58,15 @@ are stored content-addressed so identical photos across stories or
 editions share one file. Stories without a usable `og:image` render
 without a figure.
 
-Every automated build also generates a masthead cover — a deterministic
-grayscale PNG (`cover-<edition-date>.png`, Pillow text and rules, no
-third-party imagery) written beside the EPUB and embedded through the
-renderer `cover` contract. It is a pure function of the edition date,
-so rebuilds reproduce the same cover.
+Every automated build also generates a masthead cover —
+`cover-<edition-date>.png`, a Pillow grayscale PNG written beside the
+EPUB and embedded through the renderer `cover` contract. The masthead,
+rules and type are a pure function of the edition date, so rebuilds
+reproduce the same cover. When the lead story carries an acquired
+`og:image` photo it is composited under the masthead as a framed hero
+image with the story headline as its caption; editions without a
+usable photo fall back to the text-only cover, and an unreadable photo
+never blocks the build.
 
 The pipeline `validated` status means the renderer's contract checks
 passed; EPUBCheck 5.4.0 remains a CI and acceptance gate on the same

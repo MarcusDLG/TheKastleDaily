@@ -1,9 +1,10 @@
 """Render the edition's generated masthead cover.
 
-The cover is a deterministic function of the edition date — no
-third-party imagery, so it is license-clean by construction. Output is
-a grayscale PNG sized for e-ink: light background, dark ink, and
-classic masthead rules.
+The masthead, rules and type are a deterministic function of the
+edition date. When the lead story carries an acquired og:image photo
+it is composited in grayscale under the masthead — the same publisher
+image the edition already embeds. With no photo the cover is
+text-only, and an unreadable photo never blocks the build.
 """
 
 from datetime import date
@@ -42,7 +43,44 @@ def _center(draw, text: str, y: int, font, tracking: int = 0) -> None:
         x += draw.textlength(char, font=font) + tracking
 
 
-def render_cover(edition_date: date, output, *, label: str | None = None) -> Path:
+def _place_photo(image, draw, path, top: int, bottom: int, caption) -> None:
+    """Center-crop `path` into the framed hero box, captioned below.
+
+    Any unreadable image leaves the cover text-only — a photo never
+    blocks the build.
+    """
+    try:
+        photo = Image.open(path).convert("L")
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return
+    box_w = WIDTH - 2 * MARGIN
+    box_h = bottom - top
+    scale = max(box_w / photo.width, box_h / photo.height)
+    resized = photo.resize(
+        (
+            max(1, round(photo.width * scale)),
+            max(1, round(photo.height * scale)),
+        )
+    )
+    x0 = max(0, (resized.width - box_w) // 2)
+    y0 = max(0, (resized.height - box_h) // 2)
+    image.paste(resized.crop((x0, y0, x0 + box_w, y0 + box_h)), (MARGIN, top))
+    draw.rectangle(
+        (MARGIN - 1, top - 1, MARGIN + box_w, top + box_h), outline=INK, width=2
+    )
+    if caption := (caption or "").strip():
+        font = _fit(draw, caption, 30, box_w)
+        _center(draw, caption, top + box_h + 26, font)
+
+
+def render_cover(
+    edition_date: date,
+    output,
+    *,
+    label: str | None = None,
+    photo=None,
+    caption: str | None = None,
+) -> Path:
     """Draw the masthead cover for one edition date to `output` (PNG)."""
     output = Path(output)
     image = Image.new("L", (WIDTH, HEIGHT), PAPER)
@@ -78,6 +116,9 @@ def render_cover(edition_date: date, output, *, label: str | None = None) -> Pat
     if label := (label or "").strip():
         label_font = _fit(draw, label, 38, usable)
         _center(draw, label, y, label_font)
+
+    if photo is not None:
+        _place_photo(image, draw, photo, y + 50, HEIGHT - 330, caption)
 
     footer = "PERSONAL DAILY EDITION"
     footer_font = _fit(draw, footer, 30, usable, tracking=6)
