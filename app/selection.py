@@ -22,7 +22,7 @@ from app.models import (
     Source,
 )
 
-RESERVED = frozenset({"sim_racing", "maker_radio"})
+RESERVED = frozenset({"sim_racing", "maker_fabrication", "radio_comms"})
 FRESH_WINDOW = timedelta(days=2)
 RESERVE_WINDOW = timedelta(days=30)
 

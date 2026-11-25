@@ -8,9 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_editorial_baseline():
     config = yaml.safe_load((ROOT / 'config/editorial.yaml').read_text())
     assert config['target_articles'] == 15
-    assert config['weights'] == dict(formula_1=19, nascar=19, technology_ai=24,
-                                     software_engineering=14, sim_racing=14,
-                                     maker_radio=10, other=0)
+    assert config['weights'] == dict(motorsport=18, sim_racing=10,
+                                     technology_ai=16, software_engineering=10,
+                                     maker_fabrication=12, radio_comms=6,
+                                     space=8, culinary=6, visual_craft=4,
+                                     homelab=6, life_systems=4)
     assert sum(config['weights'].values()) == 100
     assert config['social_video_sources'] == ['youtube']
     assert config['timezone'] == 'America/New_York'

@@ -75,20 +75,22 @@ See SECURITY.md for implementation details and residual risks.
 
 Target: one daily edition containing approximately 15 articles.
 
-| Category | Weight |
-|---|---:|
-| Formula 1 | 19% |
-| NASCAR | 19% |
-| Technology and AI | 24% |
-| Software engineering | 14% |
-| Sim racing | 14% |
-| Maker and radio technology | 10% |
-| Other interests | 0% |
+| Section | Weight | Covers |
+|---|---:|---|
+| Motorsport culture and strategy | 18% | NASCAR, F1, endurance (WEC/IMSA) |
+| Sim racing | 10% | iRacing, leagues, hardware |
+| Technology and AI | 16% | AI, automation, emerging tech |
+| Software engineering | 10% | architecture, QE, security, release |
+| Maker and fabrication | 12% | 3D printing, electronics, DIY/home |
+| Radio and off-grid comms | 6% | Meshtastic/MeshCore, LoRa, amateur |
+| Space exploration | 8% | SpaceX/Starship, aerospace |
+| Culinary arts | 6% | Japanese cuisine, smoking/grilling |
+| Visual craft | 4% | photography, drones, design/liveries |
+| Home lab and self-hosting | 6% | NAS, Docker, automation, networking |
+| Life systems | 4% | gardening, aquariums, running, learning |
 
 Weights are editorial allocation targets, not a requirement
 to achieve fractional article counts within each edition.
-An expanded section model covering all interest areas with
-refinable weights is planned for the ingestion milestone.
 
 The implementation must define deterministic allocation and
 rounding behavior while preserving the configured priorities.

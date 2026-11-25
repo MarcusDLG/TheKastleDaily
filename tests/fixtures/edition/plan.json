@@ -3,20 +3,20 @@
   "target": 2,
   "coverage_floor_met": true,
   "coverage": {
-    "nascar": {"selected": 1, "target": 1},
-    "maker_radio": {"selected": 1, "target": 1}
+    "motorsport": {"selected": 1, "target": 1},
+    "maker_fabrication": {"selected": 1, "target": 1}
   },
   "stories": [
     {
       "article_id": "fixture-oval",
       "publisher": "Fixture Motorsports",
-      "category": "nascar",
+      "category": "motorsport",
       "url": "https://example.invalid/oval"
     },
     {
       "article_id": "fixture-maker",
       "publisher": "Fixture Workshop",
-      "category": "maker_radio",
+      "category": "maker_fabrication",
       "url": "https://example.invalid/workshop",
       "reserved": true
     }

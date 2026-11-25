@@ -2,11 +2,15 @@ target_articles: 15
 timezone: America/New_York
 edition_time: "07:00"
 weights:
-  formula_1: 19
-  nascar: 19
-  technology_ai: 24
-  software_engineering: 14
-  sim_racing: 14
-  maker_radio: 10
-  other: 0
+  motorsport: 18
+  sim_racing: 10
+  technology_ai: 16
+  software_engineering: 10
+  maker_fabrication: 12
+  radio_comms: 6
+  space: 8
+  culinary: 6
+  visual_craft: 4
+  homelab: 6
+  life_systems: 4
 social_video_sources: [youtube]
