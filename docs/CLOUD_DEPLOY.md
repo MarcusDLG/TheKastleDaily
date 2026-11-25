@@ -28,12 +28,11 @@ image: ${KASTLE_APP_IMAGE:-kastle-daily:dev}
 
 A friend's `.env` sets `KASTLE_APP_IMAGE=ghcr.io/<owner>/kastle-daily:<tag>`.
 
-**Decision: GHCR private.** The friend authenticates once
-(`docker login ghcr.io` with a read-only PAT) — five minutes, then
-pulls work forever. Public visibility is a one-click toggle with no
-migration cost if it is ever wanted, and the image carries no secrets
-(everything sensitive arrives via env), so staying private is purely
-a control-posture choice, not a technical one.
+**Decision: GHCR public.** The image carries no secrets — everything
+sensitive arrives via environment at runtime — so anonymous pulls
+remove real friction for friends at zero exposure cost. No
+`docker login`, no PAT: `KASTLE_APP_IMAGE=ghcr.io/<owner>/kastle-daily:<tag>`
+in `.env` is the entire install surface beyond the three secrets.
 
 Zero-infra fallback: a `docker save` tarball shipped directly — the
 same path that staged the NAS image — needs no registry at all.
