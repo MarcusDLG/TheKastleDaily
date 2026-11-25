@@ -84,16 +84,16 @@ class _FeedConnection(HTTPSConnection):
         raise FeedError("connection_failure") from error
 
 
-def _read_body(response) -> bytes:
+def _read_body(response, limit=MAX_BYTES) -> bytes:
     """Read a bounded, uncompressed response body within the fetch timeout."""
     if response.getheader("Content-Encoding", "identity").lower() != "identity":
         raise FeedError("unsupported_encoding")
     body = bytearray()
     deadline = monotonic() + TIMEOUT
-    while len(body) <= MAX_BYTES:
+    while len(body) <= limit:
         if monotonic() > deadline:
             raise FeedError("timeout")
-        chunk = response.read1(min(65536, MAX_BYTES + 1 - len(body)))
+        chunk = response.read1(min(65536, limit + 1 - len(body)))
         if not chunk:
             if response.length:
                 raise FeedError("response_truncated")

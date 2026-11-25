@@ -191,6 +191,9 @@ class EvidenceAcquisition(Record, Base):
     detail: Mapped[str | None] = mapped_column(Text)
     extracted_text: Mapped[str | None] = mapped_column(Text)
     content_sha256: Mapped[str | None] = mapped_column(Text)
+    photo_url: Mapped[str | None] = mapped_column(Text)
+    photo_file: Mapped[str | None] = mapped_column(Text)
+    photo_alt: Mapped[str | None] = mapped_column(Text)
 
 
 class Edition(Record, Base):

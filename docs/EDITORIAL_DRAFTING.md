@@ -17,6 +17,14 @@ transport rules (HTTPS only, public addresses, no redirects, bounded
 reads, five-second budget) and `trafilatura` reduces the page to article
 text. Evidence bytes are data only — they never steer control flow.
 
+When the page declares an `og:image`, the photo is fetched under the
+same transport rules at the renderer's 4 MiB cap, checked for JPEG or
+PNG magic bytes, and written content-addressed to `editions/photos/`
+beside the database. The record keeps the resolved `photo_url`, the
+render-relative `photo_file` name and any `og:image:alt` text. A
+missing, oversized or non-image photo never blocks the story; the
+renderer simply omits the figure.
+
 ## Generation contract
 
 A generator receives one plan story plus its extracted text and returns a
@@ -61,7 +69,10 @@ Every produced story is linked to all of its article's source
 observations through `editorial_evidence` rows carrying an acquisition
 note (retrieval time, URL, extracted length). `to_render_drafts` converts
 a run's stories into the EPUB renderer's drafts contract, mapping
-evidence links to `{url, label}` sources.
+evidence links to `{url, label}` sources. When the story's acquisition
+holds a photo, the draft gains `photo` — `file` relative to the editions
+directory, `alt` (the declared `og:image:alt` or the story headline),
+and `credit` attributing the image to its publisher.
 
 ## Run locally
 
