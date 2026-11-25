@@ -17,12 +17,12 @@ without a configured key.
 """
 
 import json
-import os
 from decimal import Decimal
 from http.client import HTTPSConnection
 from typing import Callable
 
 from app.drafting import DraftOutput
+from app.secrets import secret
 
 ENDPOINT = "api.openai.com"
 PATH = "/v1/chat/completions"
@@ -167,23 +167,23 @@ class OpenAIGenerator:
     @classmethod
     def from_env(cls):
         """Build the configured generator, or None when disabled."""
-        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        api_key = (secret("OPENAI_API_KEY") or "").strip()
         if not api_key:
             return None
         pricing = None
-        input_cost = os.environ.get("OPENAI_INPUT_COST_PER_MTOK", "").strip()
-        output_cost = os.environ.get("OPENAI_OUTPUT_COST_PER_MTOK", "").strip()
+        input_cost = (secret("OPENAI_INPUT_COST_PER_MTOK") or "").strip()
+        output_cost = (secret("OPENAI_OUTPUT_COST_PER_MTOK") or "").strip()
         if input_cost and output_cost:
             pricing = (Decimal(input_cost), Decimal(output_cost))
         return cls(
             api_key,
-            os.environ.get("OPENAI_MODEL", "").strip() or DEFAULT_MODEL,
+            (secret("OPENAI_MODEL") or "").strip() or DEFAULT_MODEL,
             max_cost_usd=Decimal(
-                os.environ.get("OPENAI_MAX_COST_USD") or DEFAULT_MAX_COST_USD
+                secret("OPENAI_MAX_COST_USD") or DEFAULT_MAX_COST_USD
             ),
             pricing=pricing,
             reasoning_effort=(
-                os.environ.get("OPENAI_REASONING_EFFORT", "").strip()
+                (secret("OPENAI_REASONING_EFFORT") or "").strip()
                 or DEFAULT_REASONING_EFFORT
             ),
         )

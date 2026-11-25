@@ -21,7 +21,6 @@ sent without explicit SMTP configuration, and recipient addresses and
 server banners stay out of error codes and logs.
 """
 
-import os
 import smtplib
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
@@ -33,6 +32,7 @@ from ssl import create_default_context
 from sqlalchemy import func, select
 
 from app.models import Delivery, DeliveryAttempt, Edition
+from app.secrets import secret
 
 TIMEOUT = 15
 MAX_ATTEMPTS = 5
@@ -41,20 +41,20 @@ BACKOFF_MINUTES = (5, 10, 20, 40, 60)
 
 def smtp_config() -> dict | None:
     """SMTP settings from the environment; None when delivery is off."""
-    host = os.environ.get("SMTP_HOST", "").strip()
+    host = (secret("SMTP_HOST") or "").strip()
     if not host:
         return None
     return {
         "host": host,
-        "port": int(os.environ.get("SMTP_PORT") or 465),
-        "username": os.environ.get("SMTP_USERNAME", "").strip(),
-        "password": os.environ.get("SMTP_PASSWORD", ""),
+        "port": int(secret("SMTP_PORT") or 465),
+        "username": (secret("SMTP_USERNAME") or "").strip(),
+        "password": secret("SMTP_PASSWORD") or "",
     }
 
 
 def destination() -> str | None:
     """The Kindle receive address, or None when not configured."""
-    return os.environ.get("KINDLE_ADDRESS", "").strip() or None
+    return (secret("KINDLE_ADDRESS") or "").strip() or None
 
 
 def smtp_client(config):
