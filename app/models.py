@@ -142,6 +142,7 @@ class EditorialRun(Record, Base):
     estimated_cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default="0")
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     error_code: Mapped[str | None] = mapped_column(Text)
+    error_detail: Mapped[str | None] = mapped_column(Text)
 
 
 class EditorialStory(Record, Base):

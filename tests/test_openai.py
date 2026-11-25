@@ -61,6 +61,17 @@ def transport_returning(response):
     return transport
 
 
+def transport_sequence(responses):
+    calls = []
+
+    def transport(payload, api_key):
+        calls.append(payload)
+        return responses[min(len(calls), len(responses)) - 1]
+
+    transport.calls = calls
+    return transport
+
+
 def ok_response(draft=None):
     return {
         "choices": [{"message": {"content": json.dumps(draft or DRAFT)}}],
@@ -118,6 +129,59 @@ def test_malformed_model_output_raises_for_blocking():
         generator.generate(STORY, EVIDENCE)
 
 
+def test_repair_retry_recovers_schema_violation():
+    transport = transport_sequence(
+        [
+            {"choices": [{"message": {"content": "not json"}}], "usage": {}},
+            ok_response(),
+        ]
+    )
+    generator = OpenAIGenerator("k", "gpt-5-mini", transport=transport)
+    output = generator.generate(STORY, EVIDENCE)
+    assert output.headline == DRAFT["headline"]
+    assert len(transport.calls) == 2
+    repair = transport.calls[1]["messages"][-1]
+    assert repair["role"] == "user" and "JSON" in repair["content"]
+    assert transport.calls[1]["messages"][-2] == {
+        "role": "assistant",
+        "content": "not json",
+    }
+
+
+def test_empty_completion_triggers_repair():
+    empty = {
+        "choices": [{"finish_reason": "length", "message": {"content": ""}}],
+        "usage": {},
+    }
+    transport = transport_sequence([empty, ok_response()])
+    generator = OpenAIGenerator("k", "gpt-5-mini", transport=transport)
+    assert generator.generate(STORY, EVIDENCE) is not None
+    assert len(transport.calls) == 2
+    # Empty content leaves no assistant turn to echo back.
+    assert transport.calls[1]["messages"][-2]["role"] == "user"
+
+
+def test_repair_failure_still_raises():
+    bad = {"choices": [{"message": {"content": "{ no"}}], "usage": {}}
+    transport = transport_sequence([bad, bad])
+    generator = OpenAIGenerator("k", "gpt-5-mini", transport=transport)
+    with pytest.raises(ValueError):
+        generator.generate(STORY, EVIDENCE)
+    assert len(transport.calls) == 2
+
+
+def test_reasoning_effort_in_payload():
+    transport = transport_returning(ok_response())
+    OpenAIGenerator("k", "gpt-5-mini", transport=transport).generate(STORY, EVIDENCE)
+    assert transport.calls[0]["reasoning_effort"] == "low"
+
+    custom = transport_returning(ok_response())
+    OpenAIGenerator(
+        "k", "gpt-5-mini", transport=custom, reasoning_effort="medium"
+    ).generate(STORY, EVIDENCE)
+    assert custom.calls[0]["reasoning_effort"] == "medium"
+
+
 def test_two_transport_failures_degrade_the_adapter():
     def dead(payload, api_key):
         dead.calls += 1
@@ -148,10 +212,12 @@ def test_from_env_uses_configured_values(monkeypatch):
     monkeypatch.setenv("OPENAI_MAX_COST_USD", "0.05")
     monkeypatch.setenv("OPENAI_INPUT_COST_PER_MTOK", "0.10")
     monkeypatch.setenv("OPENAI_OUTPUT_COST_PER_MTOK", "0.50")
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "medium")
     generator = openai_generator()
     assert generator.name == "openai/gpt-5-nano"
     assert generator.max_cost_usd == Decimal("0.05")
     assert generator.pricing == (Decimal("0.10"), Decimal("0.50"))
+    assert generator.reasoning_effort == "medium"
 
 
 @pytest.fixture
@@ -227,3 +293,61 @@ def test_run_drafting_records_model_and_usage(sessions):
         assert run.input_tokens == 800
         assert run.output_tokens == 200
         assert run.estimated_cost_usd > 0
+
+
+def test_run_drafting_records_block_reasons(sessions):
+    with sessions() as session:
+        source = Source(
+            kind="rss",
+            endpoint="https://example.com/feed",
+            publisher="Fixture Press",
+            category="technology_ai",
+            approval="approved",
+            licensing_note="Fixture",
+        )
+        session.add(source)
+        session.flush()
+        ingest = IngestionRun(source_id=source.id, status="succeeded")
+        session.add(ingest)
+        session.flush()
+        article = Article(canonical_url=STORY["url"], title=STORY["title"])
+        session.add(article)
+        session.flush()
+        session.add(
+            ArticleSource(
+                article_id=article.id,
+                source_id=source.id,
+                ingestion_run_id=ingest.id,
+                external_id="1",
+                source_url=STORY["url"],
+                attributed_to="Fixture Press",
+                published_at=datetime(2026, 11, 24, 12, tzinfo=UTC),
+            )
+        )
+        session.flush()
+
+        plan = {
+            "edition_date": "2026-11-25",
+            "coverage_floor_met": True,
+            "stories": [STORY | {"article_id": article.id}],
+        }
+        refused = {"choices": [{"message": {"content": "no"}}], "usage": {}}
+        generator = OpenAIGenerator(
+            "k", "gpt-5-mini", transport=transport_returning(refused)
+        )
+        result = run_drafting(
+            session,
+            plan,
+            fetch=lambda url: b"<html>ok</html>",
+            extract=lambda body: EVIDENCE,
+            generator=generator,
+        )
+        assert result["drafted"] == 0
+        assert result["blocked"] == 1
+        run = session.scalar(select(EditorialRun))
+        assert run.error_code == "stories_blocked"
+        detail = json.loads(run.error_detail)
+        assert detail[0]["reason"].startswith(
+            "Model output violated the draft schema"
+        )
+        assert "'no'" in detail[0]["reason"]  # truncated raw reply echoed

@@ -147,16 +147,26 @@ def run_drafting(
 
     drafted = 0
     blocked = 0
+    blocked_reasons = []
     for rank, story in enumerate(plan["stories"], start=1):
         article = session.get(Article, story["article_id"])
         if article is None:
             blocked += 1
+            blocked_reasons.append(
+                {"rank": rank, "reason": "article_missing"}
+            )
             continue
         acquisition = acquire(
             session, article, fetch=fetch, extract=extract, fetch_image=fetch_image
         )
         if not acquisition.extracted_text:
             blocked += 1
+            blocked_reasons.append(
+                {
+                    "rank": rank,
+                    "reason": f"evidence_{acquisition.status}: {acquisition.detail}",
+                }
+            )
             continue
         allowed = set(
             session.scalars(
@@ -166,15 +176,16 @@ def run_drafting(
             )
         ) | {article.canonical_url}
         try:
-            output = validate_draft(
-                generator.generate(
-                    dict(story, observed_urls=sorted(allowed)),
-                    acquisition.extracted_text,
-                ),
-                allowed,
+            generated = generator.generate(
+                dict(story, observed_urls=sorted(allowed)),
+                acquisition.extracted_text,
             )
-        except (ValueError, AttributeError, TypeError):
+            if generated is None:
+                raise ValueError("generator declined the story")
+            output = validate_draft(generated, allowed)
+        except (ValueError, AttributeError, TypeError) as error:
             blocked += 1
+            blocked_reasons.append({"rank": rank, "reason": str(error)})
             continue
         record = EditorialStory(
             editorial_run_id=run.id,
@@ -205,6 +216,7 @@ def run_drafting(
     run.status = "succeeded"
     if blocked:
         run.error_code = "stories_blocked"
+        run.error_detail = json.dumps(blocked_reasons[:10])
     run.finished_at = datetime.now(UTC)
     run.input_tokens = generator.input_tokens
     run.output_tokens = generator.output_tokens
