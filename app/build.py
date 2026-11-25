@@ -22,6 +22,7 @@ from pathlib import Path
 
 from sqlalchemy import delete, select
 
+from app.cover import render_cover
 from app.database import database_path
 from app.drafting import to_render_drafts
 from app.edition import render_epub
@@ -120,7 +121,9 @@ def build_edition(session, run, directory) -> dict:
         drafts = to_render_drafts(session, run.id)
         plan = _render_plan(json.loads(run.plan), drafts)
         directory.mkdir(parents=True, exist_ok=True)
-        render_epub(plan, drafts, directory, scratch)
+        cover_name = f"cover-{run.edition_date.isoformat()}.png"
+        render_cover(run.edition_date, directory / cover_name)
+        render_epub(plan, drafts | {"cover": cover_name}, directory, scratch)
         checksum = hashlib.sha256(scratch.read_bytes()).hexdigest()
         scratch.replace(target)
         stories = {
