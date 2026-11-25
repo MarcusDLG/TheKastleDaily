@@ -133,10 +133,12 @@ OpenAI generation and NAS deployment remain unqualified.
 | Source ingestion | Implemented (RSS and Atom, expanded registry) |
 | Editorial engine | In progress (selection, evidence drafting with story photo acquisition, OpenAI provider adapter and edition build implemented; model generation exercised in preview runs — adapter bounds reasoning spend and repair-retries malformed output) |
 | EPUB generation and delivery | Implemented (renderer, generated masthead cover, validation, pipeline build and SMTP outbox; live Send-to-Kindle qualified end to end) |
-| Scheduling and observability | Implemented (worker loop and health heartbeat) |
-| Web administration | Planned |
+| Scheduling and observability | Implemented (worker loop and health heartbeat; 30-day retention prunes rows and artifacts each pass) |
+| Web administration | Specced ([WEB_ADMIN.md](WEB_ADMIN.md)) — phased: read-only dashboard → feed management → editorial tuning |
+| Cloud deployment | Specced ([CLOUD_DEPLOY.md](CLOUD_DEPLOY.md)) — friend/AWS paths; gated on GHCR publication (M00-GOV-003) |
+| Secrets management | Specced ([SECRETS.md](SECRETS.md)) — pluggable backend chain: env default, AWS Secrets Manager |
 | MCP integration | Planned |
-| NAS deployment and recovery | Planned |
+| NAS deployment and recovery | Deployed (worker live on DS220+, first unattended edition delivered); backup/DR pending POST-MVP-001 |
 
 Milestone numbering beyond M02 remains provisional until the
 full Master Execution Plan Revision 4.0 is reconciled.
