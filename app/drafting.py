@@ -11,6 +11,7 @@ instructions, and output is schema-validated before a story is recorded.
 Malformed or unsupported output blocks that story's slot.
 """
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -134,7 +135,11 @@ def run_drafting(
             "blocked": 0,
         }
 
-    run = EditorialRun(edition_date=edition_date, model=generator.name)
+    run = EditorialRun(
+        edition_date=edition_date,
+        model=generator.name,
+        plan=json.dumps(plan, sort_keys=True, default=str),
+    )
     session.add(run)
     session.flush()
 

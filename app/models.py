@@ -135,6 +135,7 @@ class EditorialRun(Record, Base):
 
     edition_date: Mapped[date] = mapped_column(index=True)
     model: Mapped[str] = mapped_column(Text)
+    plan: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, server_default="running")
     input_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
     output_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")

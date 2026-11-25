@@ -46,8 +46,11 @@ evidence links to `{url, label}` sources.
 
 ## Run locally
 
+The run record also stores the selection plan JSON, so the edition
+build is a pure function of the run: plan plus persisted drafts.
+
 `python -m app.schedule --once` now runs migrations, registration,
-ingestion, selection and drafting. Per-story fetch or validation failures
-never fail the pass; they surface in the drafting summary and the run
-record. Inspect `editorial_runs`, `editorial_stories`,
+ingestion, selection, drafting and the edition build. Per-story fetch or
+validation failures never fail the pass; they surface in the drafting
+summary and the run record. Inspect `editorial_runs`, `editorial_stories`,
 `editorial_evidence` and `evidence_acquisitions` for outcomes.

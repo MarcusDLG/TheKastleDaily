@@ -120,8 +120,8 @@ Additional security findings are maintained in SECURITY.md.
 | M00 initialization and feasibility | Accepted |
 | M02 persistence and migrations | Superseded by the SQLite worker runtime |
 | Source ingestion | Implemented (RSS and Atom, expanded registry) |
-| Editorial engine | In progress (selection and evidence drafting implemented) |
-| EPUB generation and delivery | In progress (renderer and validation implemented; delivery pending) |
+| Editorial engine | In progress (selection, evidence drafting and edition build implemented) |
+| EPUB generation and delivery | In progress (renderer, validation and pipeline build implemented; delivery pending) |
 | Scheduling and observability | Implemented (worker loop and health heartbeat) |
 | Web administration | Planned |
 | MCP integration | Planned |
