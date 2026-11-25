@@ -60,9 +60,13 @@ new dependencies. The service binds the container's own interface
 `127.0.0.1:8080` only; raise it with
 `docker compose --profile admin up -d admin`.
 
-**Phase 2 — feed management.** `sources` CRUD: add a feed (endpoint +
-publisher + category), flip approval state (`pending`/`approved`/
-`disabled`), retire dead endpoints. Writes are small, auditable rows.
+**Phase 2 — feed management. Implemented.** `sources` writes: add a
+feed (endpoint + publisher + category + kind) and flip approval state
+(`pending`/`approved`/`disabled`). HTTP Basic auth gates every route
+except `/healthz` when `ADMIN_PASSWORD` is set; when unset the service
+is read-only and every POST fails closed with 403. A per-process form
+token protects writes against CSRF; categories validate against the
+editorial weights; redirect-after-POST carries a flash line.
 
 **Phase 3 — editorial tuning.** Weights, target article count,
 timezone and edition time against the relocated config; a restart-free

@@ -81,8 +81,24 @@ definition (0.5 vCPU / 1 GB fits the workload), EventBridge schedule
 
 ## Milestone checklist
 
-- [ ] GHCR publication authorized + first push (M00-GOV-003)
-- [ ] `docs/DEPLOY.md` — friend-facing install (compose + env only)
+- [x] GHCR publication authorized + first push (M00-GOV-003) —
+      `ghcr.io/marcusdlg/kastle-daily:latest` public, anonymous
+      amd64/arm64 pull verified
+- [x] `docs/DEPLOY.md` — friend-facing install (compose + env only)
 - [ ] `.env.example` annotated for cloud secrets backends
 - [ ] Optional: `deploy/` directory with a bootstrap script per shape
 - [ ] Evidence: one edition produced + delivered from a cloud host
+
+### Acceptance matrix
+
+The DEPLOY.md runbook executed end-to-end on each target before the
+friend path is called qualified:
+
+| Target | What it proves |
+|---|---|
+| AWS Lightsail (amd64) | The documented cloud shape; scheduled cron + durable volume |
+| macOS desktop (arm64) | Multi-arch manifest arm64 leg; Docker Desktop compose |
+| Windows desktop | Docker Desktop/WSL2 path — the sharpest edge: CRLF `.env` endings, file sharing, named volumes |
+
+Each pass = pull → `up -d` → `--once` → Kindle receipt → admin page →
+one scheduled edition firing unattended.
