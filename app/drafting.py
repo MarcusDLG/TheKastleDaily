@@ -19,13 +19,14 @@ from typing import Protocol
 
 from sqlalchemy import func, select
 
-from app.evidence import acquire, extract_text, fetch_document
+from app.evidence import acquire, extract_text, fetch_document, fetch_image
 from app.models import (
     Article,
     ArticleSource,
     EditorialEvidence,
     EditorialRun,
     EditorialStory,
+    EvidenceAcquisition,
 )
 
 MIN_PARAGRAPHS = 2
@@ -111,6 +112,7 @@ def run_drafting(
     fetch=fetch_document,
     extract=extract_text,
     generator=None,
+    fetch_image=fetch_image,
 ):
     """Draft one edition's stories; a second pass for the date is suppressed."""
     generator = generator or TemplateGenerator()
@@ -150,7 +152,9 @@ def run_drafting(
         if article is None:
             blocked += 1
             continue
-        acquisition = acquire(session, article, fetch=fetch, extract=extract)
+        acquisition = acquire(
+            session, article, fetch=fetch, extract=extract, fetch_image=fetch_image
+        )
         if not acquisition.extracted_text:
             blocked += 1
             continue
@@ -232,14 +236,24 @@ def to_render_drafts(session, run_id):
             )
             .where(EditorialEvidence.story_id == story.id)
         ).all()
-        drafts.append(
-            {
-                "article_id": str(story.article_id),
-                "headline": story.headline,
-                "paragraphs": story.body.split("\n\n"),
-                "sources": [
-                    {"url": url, "label": publisher} for url, publisher in rows
-                ],
-            }
+        draft = {
+            "article_id": str(story.article_id),
+            "headline": story.headline,
+            "paragraphs": story.body.split("\n\n"),
+            "sources": [
+                {"url": url, "label": publisher} for url, publisher in rows
+            ],
+        }
+        acquisition = session.scalar(
+            select(EvidenceAcquisition).where(
+                EvidenceAcquisition.article_id == story.article_id
+            )
         )
+        if acquisition is not None and acquisition.photo_file:
+            draft["photo"] = {
+                "file": acquisition.photo_file,
+                "alt": acquisition.photo_alt or story.headline.strip(),
+                "credit": f"Image: {rows[0][1]}" if rows else "Image: publisher",
+            }
+        drafts.append(draft)
     return {"stories": drafts}

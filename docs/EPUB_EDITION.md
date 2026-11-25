@@ -51,6 +51,13 @@ exclude articles already published in a validated edition. Rebuilding a
 date with a validated artifact in place is a no-op, and a failed build
 is recorded as `failed` so the scheduler's bounded attempts can retry.
 
+Drafts produced by the pipeline carry story photos acquired during
+evidence fetch (see [EDITORIAL_DRAFTING.md](EDITORIAL_DRAFTING.md)):
+each `photo.file` resolves under `editions/photos/`, where image bytes
+are stored content-addressed so identical photos across stories or
+editions share one file. Stories without a usable `og:image` render
+without a figure.
+
 The pipeline `validated` status means the renderer's contract checks
 passed; EPUBCheck 5.4.0 remains a CI and acceptance gate on the same
 deterministic renderer rather than a per-edition worker step, because

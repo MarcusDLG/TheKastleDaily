@@ -21,7 +21,9 @@ SQLite replaces PostgreSQL. The single database file lives on a
 named volume at `/data/kastle.db`; backup is a file copy. Rendered
 EPUBs live beside it at `/data/editions/<edition-date>.epub` and are
 rebuildable from the persisted run, so they are excluded from the
-backup contract. WAL mode,
+backup contract. Story photos fetched during evidence acquisition
+live under `/data/editions/photos/` — render inputs, also excluded
+from the backup contract. WAL mode,
 foreign keys, a busy timeout and normal synchronous mode are set on
 every connection. There is one writer (the worker), so no row-level
 locking is needed. Operational timestamps are stored as UTC.
