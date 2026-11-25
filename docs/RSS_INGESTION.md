@@ -5,20 +5,47 @@ The implementation starts from post-M02 main at `d9b8e69`.
 | Step | Objective | Business value | Execution | Acceptance |
 | --- | --- | --- | --- | --- |
 | Registry | Limit fetching to approved RSS sources | Keep publisher and licensing decisions traceable | Record the direct feed URL, publisher, editorial category and licensing disposition in the M02 source registry | Pending and disabled sources are skipped |
-| Fetch and parse | Retrieve RSS 2.0 metadata | Discover stories and preserve attribution | Run the one-shot ingestion command as the runtime role | HTTPS to public addresses, bounded reads, no redirects, safe XML parsing and conditional requests |
+| Fetch and parse | Retrieve RSS 2.0 and Atom metadata | Discover stories and preserve attribution | Run the one-shot ingestion command as the runtime role | HTTPS to public addresses, bounded reads, no redirects, DTD rejection and tolerant feedparser parsing, conditional requests |
 | Persist | Track articles, provenance and run outcomes | Handle repeated fetches without duplicate stories | Save normalized URLs, external IDs, publication times and source references | Duplicate records are avoided and a failed feed leaves other feeds eligible |
 | Verify | Qualify the ingestion path | Keep CI independent of publisher uptime | Run the regression and SQLite persistence checks | Fixtures cover repeated items, conditional responses, malformed XML and source failure isolation |
 
-## Personal pilot registry
+## Personal source registry
+
+The registry mirrors the eleven editorial sections in
+`config/editorial.yaml`. Each feed was verified to serve a valid
+RSS 2.0 or Atom document over HTTPS.
 
 | Publisher | Category | Feed | Disposition |
 | --- | --- | --- | --- |
-| Yahoo Sports NASCAR | NASCAR | https://sports.yahoo.com/nascar/rss/ | Attributed headline and link discovery. Yahoo aggregates coverage from multiple outlets. |
-| RaceFans | Formula 1 | https://www.racefans.net/feed/ | Open-wheel coverage and publisher attribution. |
-| MacRumors | Technology and AI | https://feeds.macrumors.com/MacRumors-All | Apple coverage and publisher attribution. |
-| Ars Technica | Technology and AI | https://arstechnica.com/feed/ | Broader technology coverage from the supplied Tech OPML, using the publisher's direct HTTPS feed. |
-| iRacing | Sim Racing | https://www.iracing.com/feed/ | Sim racing updates and events. |
-| Raspberry Pi | Maker and Radio | https://www.raspberrypi.com/news/feed/ | Maker and hardware project coverage. |
+| Yahoo Sports NASCAR | Motorsport | https://sports.yahoo.com/nascar/rss/ | Personal feed discovery with publisher attribution. Yahoo aggregates coverage from multiple outlets. |
+| RaceFans | Motorsport | https://www.racefans.net/feed/ | Personal feed discovery with publisher attribution. |
+| The Race | Motorsport | https://www.the-race.com/feed/ | Personal feed discovery with publisher attribution. |
+| Sportscar365 | Motorsport | https://sportscar365.com/feed/ | Personal feed discovery with publisher attribution. |
+| iRacing | Sim Racing | https://www.iracing.com/feed/ | Personal feed discovery with publisher attribution. |
+| Traxion | Sim Racing | https://traxion.gg/feed/ | Personal feed discovery with publisher attribution. |
+| MacRumors | Technology and AI | https://feeds.macrumors.com/MacRumors-All | Personal feed discovery with publisher attribution. |
+| Ars Technica | Technology and AI | https://arstechnica.com/feed/ | Personal feed discovery with publisher attribution. |
+| The Verge | Technology and AI | https://www.theverge.com/rss/index.xml | Personal feed discovery with publisher attribution. Atom feed. |
+| Tom's Hardware | Technology and AI | https://www.tomshardware.com/feeds/all | Personal feed discovery with publisher attribution. |
+| Simon Willison | Software Engineering | https://simonwillison.net/atom/everything/ | Personal feed discovery with publisher attribution. Atom feed. |
+| Raspberry Pi | Maker and Fabrication | https://www.raspberrypi.com/news/feed/ | Personal feed discovery with publisher attribution. |
+| Hackaday | Maker and Fabrication | https://hackaday.com/feed/ | Personal feed discovery with publisher attribution. |
+| Prusa3D | Maker and Fabrication | https://blog.prusa3d.com/feed/ | Personal feed discovery with publisher attribution. |
+| RTL-SDR | Radio and Comms | https://www.rtl-sdr.com/feed/ | Personal feed discovery with publisher attribution. |
+| Meshtastic | Radio and Comms | https://meshtastic.org/blog/rss.xml | Personal feed discovery with publisher attribution. |
+| Spaceflight Now | Space | https://spaceflightnow.com/feed/ | Personal feed discovery with publisher attribution. |
+| NASASpaceflight | Space | https://www.nasaspaceflight.com/feed/ | Personal feed discovery with publisher attribution. |
+| Just One Cookbook | Culinary | https://www.justonecookbook.com/feed/ | Personal feed discovery with publisher attribution. |
+| PetaPixel | Visual Craft | https://petapixel.com/feed/ | Personal feed discovery with publisher attribution. |
+| DPReview | Visual Craft | https://www.dpreview.com/feeds/news.xml | Personal feed discovery with publisher attribution. |
+| ServeTheHome | Home Lab | https://www.servethehome.com/feed/ | Personal feed discovery with publisher attribution. |
+| Reef Builders | Life Systems | https://reefbuilders.com/feed/ | Personal feed discovery with publisher attribution. |
+| Aquarium Co-Op | Life Systems | https://www.aquariumcoop.com/blogs/aquarium.atom | Personal feed discovery with publisher attribution. Atom feed. |
+
+Three additional candidates are registered as `pending` because they
+block datacenter fetchers with HTTP 403 (Jayski's NASCAR, Serious Eats,
+All3DP). Retest them from the residential NAS connection before
+approving; pending sources are never fetched.
 
 The runtime ingests approved registry entries only. The registration command explicitly opts the local database into the pilot.
 It leaves any existing registry row and approval decision intact. RSS ingestion stores headline, link,

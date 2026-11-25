@@ -23,6 +23,34 @@ def test_rss_metadata_only():
     ]
 
 
+def test_atom_entries_use_id_and_updated_fallback():
+    entries = rss.parse_feed(b"""<?xml version="1.0"?>
+        <feed xmlns="http://www.w3.org/2005/Atom"><title>Fixture</title>
+        <entry><id>urn:fixture:1</id><title> Atom story </title>
+        <link rel="alternate" href="https://example.com/atom-item"/>
+        <updated>2026-11-24T17:15:00Z</updated></entry>
+        <entry><title>No identifier</title>
+        <link href="https://example.com/second"/>
+        <published>2026-11-24T08:00:00-05:00</published></entry>
+        <entry><title>Unsafe link</title><link href="file:///tmp/x"/></entry>
+        </feed>""")
+
+    assert entries == [
+        rss.FeedItem(
+            "urn:fixture:1",
+            "https://example.com/atom-item",
+            "Atom story",
+            datetime(2026, 11, 24, 17, 15, tzinfo=UTC),
+        ),
+        rss.FeedItem(
+            "https://example.com/second",
+            "https://example.com/second",
+            "No identifier",
+            datetime(2026, 11, 24, 13, 0, tzinfo=UTC),
+        ),
+    ]
+
+
 @pytest.mark.parametrize(
     ("body", "code"),
     [

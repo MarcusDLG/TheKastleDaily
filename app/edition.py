@@ -9,6 +9,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
+from app.selection import RESERVED
+
 CONTAINER = """<?xml version="1.0" encoding="utf-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
 <rootfiles><rootfile full-path="EPUB/package.opf" media-type="application/oebps-package+xml"/>
@@ -112,7 +114,7 @@ def render_epub(plan, drafts, directory, output):
         raise ValueError("Edition has an invalid number of selected stories")
     identifiers = {item["article_id"] for item in selected}
     if len(identifiers) != len(selected) or not any(
-        item.get("reserved") and item["category"] in {"sim_racing", "maker_radio"}
+        item.get("reserved") and item["category"] in RESERVED
         for item in selected
     ):
         raise ValueError(

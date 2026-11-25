@@ -1,4 +1,4 @@
 alembic==1.20.1
 sqlalchemy==2.1.9
-defusedxml==0.7.1
+feedparser==6.0.14
 PyYAML==6.0.4

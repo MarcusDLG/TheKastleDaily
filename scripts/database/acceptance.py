@@ -49,14 +49,14 @@ def main() -> int:
         from app.database import database_engine, session_factory
         from app.ingest import ingest_sources
         from app.models import ArticleSource, Source
-        from app.pilot import register_sources
+        from app.pilot import PENDING_SOURCES, PILOT_SOURCES, register_sources
         from app.rss import FeedResponse
 
         engine = database_engine()
         try:
             with engine.begin() as connection:
                 first = register_sources(connection)
-                assert len(first) == 6, first
+                assert len(first) == len(PILOT_SOURCES) + len(PENDING_SOURCES), first
                 second = register_sources(connection)
                 assert second == [], "pilot registration must be idempotent"
 
@@ -67,20 +67,20 @@ def main() -> int:
 
             sessions = session_factory(engine)
             results = ingest_sources(sessions, fetch=stub_fetch)
-            assert len(results) == 6, results
+            assert len(results) == len(PILOT_SOURCES), results
             with sessions() as session:
                 rows = session.execute(
                     select(ArticleSource.external_id).where(
                         ArticleSource.external_id == "acceptance-1"
                     )
                 ).all()
-                assert len(rows) == 6, "one observation per source for the shared guid"
+                assert len(rows) == len(PILOT_SOURCES), "one observation per approved source for the shared guid"
 
             # Conditional refetch (304) stores nothing new.
             results = ingest_sources(sessions, fetch=stub_fetch)
             with sessions() as session:
                 total = session.execute(select(ArticleSource.id)).all()
-                assert len(total) == 6, "a not-modified pass must not duplicate rows"
+                assert len(total) == len(PILOT_SOURCES), "a not-modified pass must not duplicate rows"
 
             # Provenance survives an engine restart.
             engine.dispose()
@@ -88,7 +88,7 @@ def main() -> int:
             sessions = session_factory(engine)
             with sessions() as session:
                 publishers = session.execute(select(Source.publisher)).all()
-                assert len(publishers) == 6, publishers
+                assert len(publishers) == len(PILOT_SOURCES) + len(PENDING_SOURCES), publishers
         finally:
             engine.dispose()
 

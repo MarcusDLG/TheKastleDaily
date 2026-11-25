@@ -1,17 +1,15 @@
-"""Fetch approved RSS 2.0 feeds and extract article metadata."""
+"""Fetch approved RSS 2.0 and Atom feeds and extract article metadata."""
 
 import ipaddress
 import socket
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 from http.client import HTTPException, HTTPSConnection
 from ssl import create_default_context
 from time import monotonic
 from urllib.parse import urlsplit, urlunsplit
 
-from defusedxml.ElementTree import ParseError, fromstring
-from defusedxml.common import DefusedXmlException
+import feedparser
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_ITEMS = 200
@@ -144,31 +142,29 @@ def fetch_feed(
         connection.close()
 
 
-def _published(value: str | None) -> datetime | None:
-    if value:
-        try:
-            parsed = parsedate_to_datetime(value)
-            if parsed.tzinfo is not None:
-                return parsed.astimezone(UTC)
-        except (ValueError, OverflowError):
-            pass
+def _entry_time(entry) -> datetime | None:
+    for key in ("published_parsed", "updated_parsed", "created_parsed"):
+        value = entry.get(key)
+        if value:
+            return datetime(*value[:6], tzinfo=UTC)
     return None
 
 
 def parse_feed(body: bytes) -> list[FeedItem]:
-    try:
-        root = fromstring(body, forbid_dtd=True)
-    except (ParseError, DefusedXmlException, LookupError) as exc:
-        raise FeedError("invalid_xml") from exc
-    channel = root.find("channel") if root.tag == "rss" else None
-    if channel is None:
+    # feedparser tolerates real-world feed quirks but never resolves DTDs.
+    if b"<!DOCTYPE" in body:
+        raise FeedError("invalid_xml")
+    parsed = feedparser.parse(body)
+    if parsed.bozo and not parsed.entries:
+        raise FeedError("invalid_xml")
+    if not parsed.version:
         raise FeedError("unsupported_feed")
 
     items = []
-    for element in channel.findall("item")[:MAX_ITEMS]:
-        title = " ".join((element.findtext("title") or "").split())[:500]
+    for entry in parsed.entries[:MAX_ITEMS]:
+        title = " ".join((entry.get("title") or "").split())[:500]
         try:
-            target = _url((element.findtext("link") or "").strip(), feed=False)
+            target = _url((entry.get("link") or "").strip(), feed=False)
         except ValueError:
             continue
         host = target.hostname
@@ -176,13 +172,11 @@ def parse_feed(body: bytes) -> list[FeedItem]:
         url = urlunsplit(
             (target.scheme, authority, target.path or "/", target.query, "")
         )
-        external_id = (element.findtext("guid") or "").strip() or url
+        external_id = (entry.get("id") or "").strip() or url
         if title and len(external_id.encode()) <= 2000:
             items.append(
-                FeedItem(
-                    external_id, url, title, _published(element.findtext("pubDate"))
-                )
+                FeedItem(external_id, url, title, _entry_time(entry))
             )
-    if not items and channel.find("item") is not None:
+    if not items and parsed.entries:
         raise FeedError("no_valid_items")
     return items
