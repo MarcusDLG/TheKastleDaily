@@ -36,6 +36,25 @@ zero. A story that fails evidence or validation is blocked: it produces
 no `editorial_stories` row, the blocked count is reported, and the run is
 flagged `stories_blocked` for review.
 
+## OpenAI provider
+
+Setting `OPENAI_API_KEY` switches drafting to `OpenAIGenerator`
+(`app/openai.py`), which issues one chat completion per story against a
+strict JSON schema matching the draft contract. The prompt carries the
+evidence excerpt as quoted data and the observed URL list the output's
+sources must trace to; `validate_draft` still enforces the contract, so
+unsupported or malformed output only blocks that story's slot.
+
+Guardrails: the evidence is never instructions, the model name lands on
+`editorial_runs.model` for provenance, token usage and estimated cost
+accumulate per call, `OPENAI_MAX_COST_USD` caps estimated spend per run
+(declining remaining stories once reached), and two consecutive
+transport failures degrade the adapter for the rest of the pass.
+`OPENAI_MODEL` selects the model and the per-million pricing in
+`app/openai.py` (or `OPENAI_INPUT/OUTPUT_COST_PER_MTOK` overrides)
+estimates cost. No call is made without a configured key, and tests
+inject the transport.
+
 ## Provenance
 
 Every produced story is linked to all of its article's source

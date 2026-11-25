@@ -113,6 +113,17 @@ See INTEGRATIONS.md for implementation constraints.
 
 Additional security findings are maintained in SECURITY.md.
 
+## Live integration qualification
+
+2026-11-25: first automated end-to-end delivery. A live pipeline run
+selected 13 stories (coverage floor met), drafted via the template
+generator, rendered and validated the edition (sha256 `c63246dc…`), and
+submitted it through the dedicated Gmail sender — `smtp_accepted` on
+attempt 1. Amazon converted and synced the document, and it arrived on
+the Kindle Paperwhite navigable end to end. Provider submission,
+library sync and device receipt are evidenced separately as required.
+OpenAI generation and NAS deployment remain unqualified.
+
 ## Development roadmap
 
 | Workstream | Status |
@@ -120,7 +131,7 @@ Additional security findings are maintained in SECURITY.md.
 | M00 initialization and feasibility | Accepted |
 | M02 persistence and migrations | Superseded by the SQLite worker runtime |
 | Source ingestion | Implemented (RSS and Atom, expanded registry) |
-| Editorial engine | In progress (selection, evidence drafting and edition build implemented) |
+| Editorial engine | In progress (selection, evidence drafting, OpenAI provider adapter and edition build implemented; model generation pending qualification) |
 | EPUB generation and delivery | In progress (renderer, validation, pipeline build and SMTP outbox implemented; live send pending qualification) |
 | Scheduling and observability | Implemented (worker loop and health heartbeat) |
 | Web administration | Planned |

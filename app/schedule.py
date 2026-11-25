@@ -75,6 +75,7 @@ def run_pipeline() -> None:
     from app.drafting import run_drafting
     from app.ingest import ingest_sources
     from app.models import Edition
+    from app.openai import openai_generator
     from app.pilot import register_sources
     from app.selection import build_plan
 
@@ -87,7 +88,7 @@ def run_pipeline() -> None:
         plan = build_plan(engine=engine)
         if plan["coverage_floor_met"]:
             with session_factory(engine)() as session:
-                drafting = run_drafting(session, plan)
+                drafting = run_drafting(session, plan, generator=openai_generator())
                 session.commit()
         else:
             drafting = {"status": "skipped", "reason": "coverage_floor_unmet"}

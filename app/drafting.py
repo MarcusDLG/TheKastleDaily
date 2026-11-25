@@ -163,7 +163,11 @@ def run_drafting(
         ) | {article.canonical_url}
         try:
             output = validate_draft(
-                generator.generate(story, acquisition.extracted_text), allowed
+                generator.generate(
+                    dict(story, observed_urls=sorted(allowed)),
+                    acquisition.extracted_text,
+                ),
+                allowed,
             )
         except (ValueError, AttributeError, TypeError):
             blocked += 1
