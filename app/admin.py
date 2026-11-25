@@ -1,20 +1,32 @@
-"""Read-only dashboard for pipeline state — WEB_ADMIN.md phase 1.
+"""Operations dashboard — WEB_ADMIN.md phases 1 and 2.
 
-One page: editions, drafting-run detail, feed health, and deliveries.
+Reads: editions, drafting-run detail, feed health, deliveries.
+Writes (phase 2): feed management — add a source, flip approval state.
 Stdlib http.server only; a fresh session per request keeps the page
 live. Runs as an opt-in compose service (`profiles: [admin]`) — the
 worker's no-ports posture is preserved. The process binds the container
-interface; exposure is a host-side publish decision (`127.0.0.1:8080`).
+interface; exposure is a host-side publish decision (`127.0.0.1:8080`
+in the repo compose; the NAS overrides to the LAN).
+
+Auth contract: when ADMIN_PASSWORD is set, HTTP Basic auth gates every
+route except /healthz, and writes additionally require a per-process
+form token (CSRF). When unset, reads stay open and every POST fails
+closed with 403 — a passwordless deployment is read-only.
 """
 
 import argparse
+import base64
+import hmac
 import json
 import os
 import socket
 from datetime import UTC, datetime, timedelta
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, quote, urlparse
+from uuid import UUID, uuid4
 
+import yaml
 from sqlalchemy import func, select
 
 from app.models import (
@@ -28,6 +40,7 @@ from app.models import (
     IngestionRun,
     Source,
 )
+from app.secrets import secret
 
 PAGE_CSS = """
 body { font-family: Georgia, 'Times New Roman', serif; margin: 2rem auto;
@@ -69,6 +82,71 @@ def _fmt_dt(value: datetime | None) -> str:
     if value is None:
         return "—"
     return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+
+
+APPROVAL_STATES = ("pending", "approved", "disabled")
+SOURCE_KINDS = ("rss", "youtube")
+
+
+def editorial_categories(config_path="config/editorial.yaml") -> list[str]:
+    """Valid feed categories — the genre weights in editorial config."""
+    try:
+        config = yaml.safe_load(open(config_path).read()) or {}
+    except OSError:
+        return []
+    return sorted(config.get("weights", {}).keys())
+
+
+def admin_credentials() -> tuple[str, str | None]:
+    """(username, password); password None means writes stay disabled."""
+    return (
+        (secret("ADMIN_USERNAME") or "admin").strip() or "admin",
+        secret("ADMIN_PASSWORD") or None,
+    )
+
+
+def add_source(session, fields: dict, categories: list) -> None:
+    """Insert an approved feed. Raises ValueError on bad input."""
+    endpoint = fields.get("endpoint", "").strip()
+    publisher = fields.get("publisher", "").strip()
+    category = fields.get("category", "").strip()
+    kind = fields.get("kind", "rss").strip()
+    note = fields.get("licensing_note", "").strip()
+    if not endpoint.startswith(("http://", "https://")):
+        raise ValueError("endpoint must be an http(s) URL")
+    if not publisher:
+        raise ValueError("publisher is required")
+    if categories and category not in categories:
+        raise ValueError(f"unknown category: {category}")
+    if kind not in SOURCE_KINDS:
+        raise ValueError(f"unknown kind: {kind}")
+    if session.scalar(
+        select(func.count()).select_from(Source).where(Source.endpoint == endpoint)
+    ):
+        raise ValueError("endpoint already registered")
+    session.add(
+        Source(
+            kind=kind,
+            endpoint=endpoint,
+            publisher=publisher,
+            category=category,
+            licensing_note=note or "Added via admin",
+            approval="approved",
+        )
+    )
+
+
+def set_source_state(session, source_id: str, approval: str) -> None:
+    """Flip a feed's approval state. Raises ValueError on bad input."""
+    if approval not in APPROVAL_STATES:
+        raise ValueError(f"unknown approval state: {approval}")
+    try:
+        source = session.get(Source, UUID(source_id))
+    except ValueError:
+        source = None
+    if source is None:
+        raise ValueError("unknown source")
+    source.approval = approval
 
 
 def dashboard_data(session) -> dict:
@@ -160,22 +238,30 @@ def dashboard_data(session) -> dict:
     }
 
 
-def render_html(data: dict) -> str:
+def render_html(
+    data: dict, *, token: str, writable: bool, categories: list, flash=None
+) -> str:
     stats = data["stats"]
+    mode = "read + write" if writable else "read-only"
     rows = [
         "<!doctype html><html><head><meta charset='utf-8'>",
         "<meta name='viewport' content='width=device-width, initial-scale=1'>",
-        "<meta http-equiv='refresh' content='300'>",
         "<title>The Kastle Daily — Operations</title>",
         f"<style>{PAGE_CSS}</style></head><body>",
         "<div class='masthead'><h1>The Kastle Daily</h1>",
-        "<div class='dateline'>Operations desk — read-only — generated "
+        f"<div class='dateline'>Operations desk — {mode} — generated "
         f"{_fmt_dt(data['generated_at'])} UTC · "
         f"{stats['articles_total']} articles ({stats['articles_24h']} in 24h) · "
         f"{stats['sources_pending']} feeds pending approval</div></div>",
-        "<h2>Editions</h2><table><tr><th>Date</th><th>Status</th>"
-        "<th>Stories</th><th>SHA-256</th><th>Delivery</th></tr>",
     ]
+    if flash:
+        kind, message = flash
+        cls = "ok" if kind == "ok" else "bad"
+        rows.append(f"<p class='{cls}'>{escape(message)}</p>")
+    rows.append(
+        "<h2>Editions</h2><table><tr><th>Date</th><th>Status</th>"
+        "<th>Stories</th><th>SHA-256</th><th>Delivery</th></tr>"
+    )
     for edition in data["editions"]:
         sha = (edition.epub_sha256 or "—")[:12]
         deliveries = data["deliveries"].get(edition.id, [])
@@ -218,10 +304,11 @@ def render_html(data: dict) -> str:
                 )
             rows.append("</table>")
 
+    actions = "<th>Actions</th>" if writable else ""
     rows.append(
         "<h2>Feed health</h2><table><tr><th>Publisher</th><th>Category</th>"
         "<th>Approval</th><th>Last ingest</th><th>Detail</th>"
-        "<th>Fail streak</th></tr>"
+        f"<th>Fail streak</th>{actions}</tr>"
     )
     for feed in data["feeds"]:
         source, latest = feed["source"], feed["latest"]
@@ -230,6 +317,20 @@ def render_html(data: dict) -> str:
             f'<span class="status bad">{streak}</span>' if streak
             else '<span class="muted">0</span>'
         )
+        action_cell = ""
+        if writable:
+            buttons = []
+            for state in APPROVAL_STATES:
+                if state != source.approval:
+                    buttons.append(
+                        "<form method='post' action='/sources/state' "
+                        "style='display:inline'>"
+                        f"<input type='hidden' name='token' value='{token}'>"
+                        f"<input type='hidden' name='id' value='{source.id}'>"
+                        f"<input type='hidden' name='approval' value='{state}'>"
+                        f"<button type='submit'>{state}</button></form>"
+                    )
+            action_cell = "<td>" + " ".join(buttons) + "</td>"
         rows.append(
             f"<tr><td>{escape(source.publisher)}</td>"
             f"<td class='muted'>{escape(source.category)}</td>"
@@ -238,28 +339,148 @@ def render_html(data: dict) -> str:
             f"<span class='muted'>{_fmt_dt(latest.finished_at if latest else None)}"
             f"</span></td>"
             f"<td class='reason'>{escape(latest.error_code or '—') if latest else '—'}"
-            f"</td><td>{streak_cell}</td></tr>"
+            f"</td><td>{streak_cell}</td>{action_cell}</tr>"
         )
     rows.append("</table>")
-    rows.append(
-        "<p class='muted'>Refresh every 5 minutes. No state is modified "
-        "by this service.</p></body></html>"
-    )
+    if writable:
+        options = "".join(
+            f"<option value='{escape(c)}'>{escape(c)}</option>" for c in categories
+        )
+        kinds = "".join(
+            f"<option value='{k}'>{k}</option>" for k in SOURCE_KINDS
+        )
+        rows.append(
+            "<h2>Add feed</h2>"
+            "<form method='post' action='/sources/add'>"
+            f"<input type='hidden' name='token' value='{token}'>"
+            "<table>"
+            "<tr><td>Endpoint</td><td><input name='endpoint' size='48' "
+            "placeholder='https://…/feed.xml' required></td></tr>"
+            "<tr><td>Publisher</td><td><input name='publisher' required></td></tr>"
+            "<tr><td>Category</td><td><select name='category'>"
+            f"{options}</select></td></tr>"
+            "<tr><td>Kind</td><td><select name='kind'>"
+            f"{kinds}</select></td></tr>"
+            "<tr><td>Licensing note</td><td><input name='licensing_note'>"
+            "</td></tr>"
+            "<tr><td></td><td><button type='submit'>Add feed</button></td></tr>"
+            "</table></form>"
+        )
+    else:
+        rows.append(
+            "<p class='muted'>Set ADMIN_PASSWORD to enable feed management."
+            "</p>"
+        )
+    rows.append("<p class='muted'>Refresh: reload the page.</p></body></html>")
     return "".join(rows)
 
 
-def make_handler(factory):
+def make_handler(factory, *, token: str, username: str, password: str | None,
+                 categories: list):
     class DashboardHandler(BaseHTTPRequestHandler):
+        def _authed(self) -> bool:
+            if password is None:
+                return False
+            header = self.headers.get("Authorization", "")
+            if not header.startswith("Basic "):
+                return False
+            try:
+                decoded = base64.b64decode(header[6:]).decode()
+            except ValueError:
+                return False
+            user, _, pw = decoded.partition(":")
+            return hmac.compare_digest(user, username) and hmac.compare_digest(
+                pw, password
+            )
+
+        def _unauthorized(self):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="kastle"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _redirect(self, kind: str, message: str):
+            self.send_response(303)
+            self.send_header("Location", f"/?{kind}={quote(message)}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _fields(self) -> dict:
+            length = int(self.headers.get("Content-Length") or 0)
+            if not 0 < length <= 8192:
+                return {}
+            body = self.rfile.read(length).decode(errors="replace")
+            return {
+                key: values[0]
+                for key, values in parse_qs(body).items()
+                if values
+            }
+
+        def _writable(self, fields: dict) -> bool:
+            """Auth + CSRF gate for every write."""
+            if not self._authed():
+                self._unauthorized()
+                return False
+            supplied = fields.get("token", "")
+            if not supplied or not hmac.compare_digest(supplied, token):
+                self._respond(403, "text/plain", b"bad form token")
+                return False
+            return True
+
         def do_GET(self):
             if self.path == "/healthz":
                 self._respond(200, "application/json", b'{"status":"ok"}')
                 return
-            if self.path not in ("/", "/index.html"):
+            if password is not None and not self._authed():
+                self._unauthorized()
+                return
+            parsed = urlparse(self.path)
+            if parsed.path not in ("/", "/index.html"):
                 self._respond(404, "text/plain", b"not found")
                 return
+            params = parse_qs(parsed.query)
+            flash = None
+            for kind in ("ok", "err"):
+                if params.get(kind):
+                    flash = (kind, params[kind][0])
             with factory() as session:
-                body = render_html(dashboard_data(session)).encode()
+                body = render_html(
+                    dashboard_data(session),
+                    token=token,
+                    writable=password is not None,
+                    categories=categories,
+                    flash=flash,
+                ).encode()
             self._respond(200, "text/html; charset=utf-8", body)
+
+        def do_POST(self):
+            if password is None:
+                self._respond(
+                    403, "text/plain",
+                    b"writes disabled - set ADMIN_PASSWORD"
+                )
+                return
+            fields = self._fields()
+            if not self._writable(fields):
+                return
+            path = urlparse(self.path).path
+            try:
+                with factory() as session:
+                    if path == "/sources/add":
+                        add_source(session, fields, categories)
+                        session.commit()
+                        self._redirect("ok", "feed added")
+                    elif path == "/sources/state":
+                        set_source_state(
+                            session, fields.get("id", ""),
+                            fields.get("approval", ""),
+                        )
+                        session.commit()
+                        self._redirect("ok", "feed updated")
+                    else:
+                        self._respond(404, "text/plain", b"not found")
+            except ValueError as error:
+                self._redirect("err", str(error))
 
         def _respond(self, code, content_type, body):
             self.send_response(code)
@@ -305,10 +526,19 @@ def main(argv=None) -> int:
         poolclass=NullPool,
         hide_parameters=True,
     )
+    username, password = admin_credentials()
     server = ThreadingHTTPServer(
-        (args.host, args.port), make_handler(session_factory(engine))
+        (args.host, args.port),
+        make_handler(
+            session_factory(engine),
+            token=uuid4().hex,
+            username=username,
+            password=password,
+            categories=editorial_categories(),
+        ),
     )
-    print(f"admin dashboard on {args.host}:{args.port}")
+    mode = "read+write" if password else "read-only (set ADMIN_PASSWORD to enable writes)"
+    print(f"admin dashboard on {args.host}:{args.port} [{mode}]")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -43,6 +43,8 @@ services:
     environment:
       KASTLE_DB: /data/kastle.db
       ADMIN_PORT: "8080"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
       - "127.0.0.1:${ADMIN_PORT:-8080}:8080"
     mem_limit: 128m
