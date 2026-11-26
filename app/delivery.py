@@ -21,6 +21,7 @@ sent without explicit SMTP configuration, and recipient addresses and
 server banners stay out of error codes and logs.
 """
 
+import re
 import smtplib
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
@@ -29,14 +30,15 @@ from hashlib import sha256
 from pathlib import Path
 from ssl import create_default_context
 
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 
-from app.models import Delivery, DeliveryAttempt, Edition
+from app.models import Delivery, DeliveryAttempt, DeliveryRecipient, Edition
 from app.secrets import secret
 
 TIMEOUT = 15
 MAX_ATTEMPTS = 5
 BACKOFF_MINUTES = (5, 10, 20, 40, 60)
+ADDRESS_RE = re.compile(r"[^\s@,]+@[^\s@,]+")
 
 
 def smtp_config() -> dict | None:
@@ -52,10 +54,103 @@ def smtp_config() -> dict | None:
     }
 
 
-def destinations() -> list[str]:
-    """The Kindle receive addresses — a comma-separated list, or empty."""
+def env_addresses() -> list[str]:
+    """KINDLE_ADDRESS as a comma-separated list, or empty."""
     raw = secret("KINDLE_ADDRESS") or ""
     return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def sync_recipients(session) -> int:
+    """Additively sync KINDLE_ADDRESS into the registry. Returns rows added.
+
+    Never deletes and never re-enables — disables are admin-owned state,
+    so a disabled env address stays disabled.
+    """
+    added = 0
+    known = set(session.scalars(select(DeliveryRecipient.address)).all())
+    for address in env_addresses():
+        if address not in known:
+            session.add(DeliveryRecipient(address=address, enabled=True))
+            known.add(address)
+            added += 1
+    return added
+
+
+def destinations(session) -> list[str]:
+    """Enabled registry recipients — the outbox enrolls one row per pair."""
+    return session.scalars(
+        select(DeliveryRecipient.address).where(DeliveryRecipient.enabled)
+    ).all()
+
+
+def add_recipient(session, address: str) -> str | None:
+    """Validate and register a recipient. Returns an error string, or None."""
+    address = (address or "").strip()
+    if not address or len(address) > 254 or not ADDRESS_RE.fullmatch(address):
+        return "invalid address"
+    exists = session.scalar(
+        select(DeliveryRecipient.id).where(DeliveryRecipient.address == address)
+    )
+    if exists is not None:
+        return "already registered"
+    session.add(DeliveryRecipient(address=address, enabled=True))
+    return None
+
+
+def set_recipient_state(session, address: str, enabled: bool) -> bool:
+    """Enable or disable a registered recipient. False when unknown."""
+    row = session.scalar(
+        select(DeliveryRecipient).where(DeliveryRecipient.address == address)
+    )
+    if row is None:
+        return False
+    row.enabled = enabled
+    return True
+
+
+def resend_latest(session, address: str, *, now=None) -> bool:
+    """Requeue the newest delivery for a recipient. False when none to send.
+
+    A `sending` row belongs to an in-flight drain and is left alone —
+    the caller can retry once that attempt finalizes.
+    """
+    now = now or datetime.now(UTC)
+    delivery = session.scalar(
+        select(Delivery)
+        .where(Delivery.destination_key == address)
+        .order_by(desc(Delivery.created_at))
+        .limit(1)
+    )
+    if delivery is None or delivery.status == "sending":
+        return False
+    delivery.status = "pending"
+    delivery.available_at = now
+    return True
+
+
+def recipient_overview(session) -> list[dict]:
+    """Registry rows joined with each address's newest delivery state."""
+    rows = session.scalars(
+        select(DeliveryRecipient).order_by(DeliveryRecipient.address)
+    ).all()
+    overview = []
+    for row in rows:
+        latest = session.execute(
+            select(Delivery.status, Edition.edition_date)
+            .join(Edition, Delivery.edition_id == Edition.id)
+            .where(Delivery.destination_key == row.address)
+            .order_by(desc(Delivery.created_at))
+            .limit(1)
+        ).first()
+        overview.append(
+            {
+                "address": row.address,
+                "enabled": row.enabled,
+                "last_status": latest[0] if latest else None,
+                "last_edition": latest[1].isoformat() if latest else None,
+            }
+        )
+    return overview
 
 
 def smtp_client(config):
@@ -90,12 +185,14 @@ def ensure_delivery(session, edition, destination_key):
     return delivery, True
 
 
-def build_message(delivery, edition_date, filename, payload, sender):
+def build_message(delivery, edition_date, filename, payload, sender, attempt=1):
     message = EmailMessage()
     message["From"] = sender
     message["To"] = delivery.destination_key
     message["Date"] = format_datetime(datetime.now(UTC))
-    message["Message-ID"] = f"<{delivery.id}@kastle-daily>"
+    # Attempt-scoped: a resubmitted delivery must not reuse a header that
+    # downstream relays can deduplicate on.
+    message["Message-ID"] = f"<{delivery.id}.{attempt}@kastle-daily>"
     message["Subject"] = f"The Kastle Daily — {edition_date.isoformat()}"
     message.set_content("Automated edition delivery.")
     message.add_attachment(
@@ -112,7 +209,7 @@ def _error_code(error) -> str:
     return f"{type(error).__name__}:{code}" if code else type(error).__name__
 
 
-def _send(config, factory, delivery, edition):
+def _send(config, factory, delivery, edition, attempt_number):
     """One submission. Returns (outcome, error_code, message_id)."""
     try:
         payload = Path(edition.epub_key).read_bytes()
@@ -122,7 +219,12 @@ def _send(config, factory, delivery, edition):
         return "failed", "checksum_mismatch", None
     sender = config["username"] or "kastle-daily"
     message = build_message(
-        delivery, edition.edition_date, Path(edition.epub_key).name, payload, sender
+        delivery,
+        edition.edition_date,
+        Path(edition.epub_key).name,
+        payload,
+        sender,
+        attempt_number,
     )
 
     client = None
@@ -249,7 +351,9 @@ def drain_outbox(engine, *, config=None, factory=smtp_client, now=None):
         with sessions() as session:
             delivery = session.get(Delivery, delivery_id)
             edition = session.get(Edition, delivery.edition_id)
-            outcome, error, message_id = _send(config, factory, delivery, edition)
+            outcome, error, message_id = _send(
+                config, factory, delivery, edition, attempt_number
+            )
             attempt = session.scalar(
                 select(DeliveryAttempt).where(
                     DeliveryAttempt.delivery_id == delivery.id,

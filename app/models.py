@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -266,3 +267,10 @@ class DeliveryAttempt(Record, Base):
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     smtp_message_id: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(Text)
+
+
+class DeliveryRecipient(Record, Base):
+    __tablename__ = "delivery_recipients"
+
+    address: Mapped[str] = mapped_column(Text, unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default="1")

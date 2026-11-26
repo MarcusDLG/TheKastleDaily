@@ -78,6 +78,16 @@ new genres are a name+weight row. `KASTLE_EDITORIAL_CONFIG` overrides
 the path outright. Writes are validated before landing and saved
 atomically (tmp + replace).
 
+**Phase 4 — recipient management. Implemented.** `delivery_recipients`
+is the recipient registry: `KINDLE_ADDRESS` syncs additively each
+pipeline pass (new env entries join; nothing is removed or re-enabled
+from env — disables are admin-owned). The admin Recipients section
+lists addresses with each row's newest delivery state, adds
+validated addresses, toggles enabled, and "resend latest" requeues a
+recipient's newest delivery for the next drain. Bundled fix:
+Message-IDs are now attempt-scoped (`<id>.<attempt>@kastle-daily`) so
+resubmits can't be dropped by downstream deduplication.
+
 ## Framework decision point
 
 Phase 1 is viable on stdlib `http.server` — zero new dependencies,
