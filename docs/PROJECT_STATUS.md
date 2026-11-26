@@ -102,6 +102,8 @@ See INTEGRATIONS.md for implementation constraints.
 | ID | Requirement | Required disposition |
 |---|---|---|
 | POST-MVP-001 | NAS backup and disaster recovery | Owner-approved post-MVP remediation |
+| NAS-SEC-TLS | TLS or tailnet for admin service | Open — Basic auth is cleartext on LAN |
+| NAS-SEC-DIGEST | Digest-pinned image pulls on NAS | Open — `:latest` is a mutable tag |
 | M00-EXC-001 | PostgreSQL libxml2 exception | Closed: PostgreSQL image removed |
 | M00-EXC-002 | PostgreSQL gosu exceptions | Closed: PostgreSQL image removed |
 | M00-GOV-003 | GHCR access verification | First authorized publication |
