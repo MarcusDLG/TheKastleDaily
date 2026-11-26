@@ -15,8 +15,9 @@ All configuration arrives as environment variables:
 | `KINDLE_ADDRESS` | Personal address — treat as private |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `OPENAI_*` tunables | Configuration, not secret |
 
-Consumers read them at call sites (`OpenAIGenerator.from_env`, the
-delivery transport) via `os.environ` — clean seams already exist.
+Consumers read them through `app/secrets.py`'s resolver
+(`OpenAIGenerator.from_env`, the delivery transport) — env first,
+then the configured backend.
 
 ## Design
 
@@ -51,8 +52,8 @@ def secret(name: str) -> str | None:
 
 ## Rollout
 
-1. `secrets.py` + `env` backend — no behavior change, full suite green.
-2. `aws` backend + boto3 (pinned, hashed) + unit tests with injected
+1. ✅ `secrets.py` + `env` backend — no behavior change, full suite green.
+2. ✅ `aws` backend + boto3 (pinned, hashed) + unit tests with injected
    client.
-3. Document both in `.env.example` and DEPLOY.md; friend AWS deploys
+3. ✅ Documented in `.env.example` and DEPLOY.md; friend AWS deploys
    point `SECRETS_BACKEND=aws` and hold no plaintext secrets on disk.
