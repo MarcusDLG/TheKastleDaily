@@ -1,7 +1,8 @@
-"""Operations dashboard — WEB_ADMIN.md phases 1 and 2.
+"""Operations dashboard — WEB_ADMIN.md phases 1-4.
 
-Reads: editions, drafting-run detail, feed health, deliveries.
-Writes (phase 2): feed management — add a source, flip approval state.
+Reads: editions, drafting-run detail, feed health, deliveries, recipients.
+Writes: feed management (add/state), editorial tuning, recipient
+management (add/enable/disable/resend-latest).
 Stdlib http.server only; a fresh session per request keeps the page
 live. Runs as an opt-in compose service (`profiles: [admin]`) — the
 worker's no-ports posture is preserved. The process binds the container
@@ -29,6 +30,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
+from app.delivery import (
+    add_recipient,
+    recipient_overview,
+    resend_latest,
+    set_recipient_state,
+)
 from app.models import (
     Article,
     Delivery,
@@ -262,6 +269,7 @@ def dashboard_data(session) -> dict:
         "attempts": attempt_counts,
         "drafting": drafting,
         "feeds": feeds,
+        "recipients": recipient_overview(session),
         "stats": stats,
         "generated_at": datetime.now(UTC),
     }
@@ -308,6 +316,53 @@ def render_html(
         )
     rows.append("</table>")
 
+    actions = "<th>Actions</th>" if writable else ""
+    rows.append(
+        "<h2>Recipients</h2><table><tr><th>Address</th><th>State</th>"
+        f"<th>Last delivery</th><th>Edition</th>{actions}</tr>"
+    )
+    for recipient in data["recipients"]:
+        state = "enabled" if recipient["enabled"] else "disabled"
+        action_cell = ""
+        if writable:
+            buttons = []
+            next_state = "disable" if recipient["enabled"] else "enable"
+            buttons.append(
+                "<form method='post' action='/recipients/state' "
+                "style='display:inline'>"
+                f"<input type='hidden' name='token' value='{token}'>"
+                f"<input type='hidden' name='address' "
+                f"value='{escape(recipient['address'])}'>"
+                f"<input type='hidden' name='state' value='{next_state}'>"
+                f"<button type='submit'>{next_state}</button></form>"
+            )
+            if recipient["enabled"] and recipient["last_status"]:
+                buttons.append(
+                    "<form method='post' action='/deliveries/resend' "
+                    "style='display:inline'>"
+                    f"<input type='hidden' name='token' value='{token}'>"
+                    f"<input type='hidden' name='address' "
+                    f"value='{escape(recipient['address'])}'>"
+                    "<button type='submit'>resend latest</button></form>"
+                )
+            action_cell = "<td>" + " ".join(buttons) + "</td>"
+        rows.append(
+            f"<tr><td>{escape(recipient['address'])}</td>"
+            f"<td>{_pill(state)}</td>"
+            f"<td>{_pill(recipient['last_status'])}</td>"
+            f"<td class='muted'>{escape(recipient['last_edition'] or '—')}</td>"
+            f"{action_cell}</tr>"
+        )
+    rows.append("</table>")
+    if writable:
+        rows.append(
+            "<form method='post' action='/recipients/add'>"
+            f"<input type='hidden' name='token' value='{token}'>"
+            "<input name='address' size='40' "
+            "placeholder='name_abc123@kindle.com' required>"
+            "<button type='submit'>Add recipient</button></form>"
+        )
+
     drafting = data["drafting"]
     if drafting:
         run = drafting["run"]
@@ -334,7 +389,6 @@ def render_html(
                 )
             rows.append("</table>")
 
-    actions = "<th>Actions</th>" if writable else ""
     rows.append(
         "<h2>Feed health</h2><table><tr><th>Publisher</th><th>Category</th>"
         "<th>Approval</th><th>Last ingest</th><th>Detail</th>"
@@ -547,6 +601,31 @@ def make_handler(factory, *, token: str, username: str, password: str | None,
                     elif path == "/editorial/save":
                         save_editorial(fields)
                         self._redirect("ok", "editorial config saved")
+                    elif path == "/recipients/add":
+                        error = add_recipient(session, fields.get("address", ""))
+                        if error is not None:
+                            self._redirect("err", error)
+                        else:
+                            session.commit()
+                            self._redirect("ok", "recipient added")
+                    elif path == "/recipients/state":
+                        state = fields.get("state", "")
+                        if state not in ("enable", "disable"):
+                            raise ValueError("unknown state")
+                        if not set_recipient_state(
+                            session, fields.get("address", ""), state == "enable"
+                        ):
+                            raise ValueError("unknown recipient")
+                        session.commit()
+                        self._redirect("ok", "recipient updated")
+                    elif path == "/deliveries/resend":
+                        if resend_latest(session, fields.get("address", "")):
+                            session.commit()
+                            self._redirect(
+                                "ok", "resend queued - worker sends next wake"
+                            )
+                        else:
+                            self._redirect("err", "no delivery to resend")
                     else:
                         self._respond(404, "text/plain", b"not found")
             except ValueError as error:

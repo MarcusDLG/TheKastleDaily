@@ -7,8 +7,23 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.delivery import destinations, drain_outbox, ensure_delivery
-from app.models import Base, Delivery, DeliveryAttempt, Edition
+from app.delivery import (
+    add_recipient,
+    destinations,
+    drain_outbox,
+    ensure_delivery,
+    env_addresses,
+    resend_latest,
+    set_recipient_state,
+    sync_recipients,
+)
+from app.models import (
+    Base,
+    Delivery,
+    DeliveryAttempt,
+    DeliveryRecipient,
+    Edition,
+)
 
 EDITION_DATE = date(2026, 11, 25)
 NOW = datetime(2026, 11, 25, 12, tzinfo=UTC)
@@ -107,14 +122,78 @@ def attempts(session, delivery_id):
     ).all()
 
 
-def test_destinations_parses_comma_separated(monkeypatch):
+def test_env_addresses_parses_comma_separated(monkeypatch):
     monkeypatch.setenv("KINDLE_ADDRESS", "a@k.test, b@k.test ,, c@k.test ")
-    assert destinations() == ["a@k.test", "b@k.test", "c@k.test"]
+    assert env_addresses() == ["a@k.test", "b@k.test", "c@k.test"]
 
 
-def test_destinations_empty_when_unset(monkeypatch):
+def test_env_addresses_empty_when_unset(monkeypatch):
     monkeypatch.delenv("KINDLE_ADDRESS", raising=False)
-    assert destinations() == []
+    assert env_addresses() == []
+
+
+def test_sync_recipients_is_additive(monkeypatch, sessions):
+    factory, _ = sessions
+    monkeypatch.setenv("KINDLE_ADDRESS", "a@k.test,b@k.test")
+    with factory() as session:
+        assert sync_recipients(session) == 2
+        session.commit()
+        assert sync_recipients(session) == 0
+        assert destinations(session) == ["a@k.test", "b@k.test"]
+        # Removing an env entry leaves the registry row in place.
+        monkeypatch.setenv("KINDLE_ADDRESS", "b@k.test")
+        assert sync_recipients(session) == 0
+        assert destinations(session) == ["a@k.test", "b@k.test"]
+        # New env entries still join on later passes.
+        monkeypatch.setenv("KINDLE_ADDRESS", "b@k.test,c@k.test")
+        assert sync_recipients(session) == 1
+        session.commit()
+        assert destinations(session) == ["a@k.test", "b@k.test", "c@k.test"]
+
+
+def test_sync_never_reenables_disabled_recipient(monkeypatch, sessions):
+    factory, _ = sessions
+    monkeypatch.setenv("KINDLE_ADDRESS", "a@k.test")
+    with factory() as session:
+        sync_recipients(session)
+        session.commit()
+        assert set_recipient_state(session, "a@k.test", False)
+        session.commit()
+        assert sync_recipients(session) == 0
+        session.commit()
+        assert destinations(session) == []
+
+
+def test_destinations_only_enabled(monkeypatch, sessions):
+    factory, _ = sessions
+    with factory() as session:
+        session.add(DeliveryRecipient(address="on@k.test", enabled=True))
+        session.add(DeliveryRecipient(address="off@k.test", enabled=False))
+        session.commit()
+        assert destinations(session) == ["on@k.test"]
+
+
+def test_add_recipient_validation(sessions):
+    factory, _ = sessions
+    with factory() as session:
+        assert add_recipient(session, "not-an-address") == "invalid address"
+        assert add_recipient(session, "a@k.test") is None
+        session.commit()
+        assert add_recipient(session, "a@k.test") == "already registered"
+
+
+def test_resend_latest_requeues_newest(sessions, tmp_path):
+    factory, _ = sessions
+    with factory() as session:
+        edition = seed_edition(session, tmp_path)
+        old, _ = ensure_delivery(session, edition, "a@k.test")
+        old.status = "smtp_accepted"
+        session.commit()
+        assert resend_latest(session, "a@k.test")
+        session.commit()
+        refreshed = session.get(type(old), old.id)
+        assert refreshed.status == "pending"
+        assert not resend_latest(session, "nobody@k.test")
 
 
 def test_multiple_destinations_each_get_a_delivery(sessions, tmp_path):
@@ -168,7 +247,7 @@ def test_accepted_send_marks_delivery(sessions, tmp_path):
         assert delivery.status == "smtp_accepted"
         (attempt,) = attempts(session, delivery_id)
         assert attempt.outcome == "smtp_accepted"
-        assert attempt.smtp_message_id == f"<{delivery_id}@kastle-daily>"
+        assert attempt.smtp_message_id == f"<{delivery_id}.1@kastle-daily>"
 
     again = drain_outbox(engine, config=CONFIG, factory=factory_for({}), now=NOW)
     assert again["claimed"] == 0

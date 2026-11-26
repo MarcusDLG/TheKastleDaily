@@ -76,7 +76,12 @@ def run_pipeline() -> None:
 
     from app.build import build_edition, editions_dir, latest_succeeded_run
     from app.database import database_engine, session_factory
-    from app.delivery import destinations, drain_safely, ensure_delivery
+    from app.delivery import (
+        destinations,
+        drain_safely,
+        ensure_delivery,
+        sync_recipients,
+    )
     from app.drafting import run_drafting
     from app.ingest import ingest_sources
     from app.models import Edition
@@ -90,6 +95,11 @@ def run_pipeline() -> None:
     try:
         with engine.begin() as connection:
             register_sources(connection)
+        # Additive env → registry sync runs every pass, so a disabled
+        # address the admin removed stays removed.
+        with session_factory(engine)() as session:
+            sync_recipients(session)
+            session.commit()
         ingest_sources(session_factory(engine))
         plan = build_plan(engine=engine)
         if plan["coverage_floor_met"]:
@@ -108,16 +118,15 @@ def run_pipeline() -> None:
                 edition = build_edition(session, run, editions_dir())
                 session.commit()
         delivery = {"status": "skipped", "reason": "not_applicable"}
-        dests = destinations()
-        if (
-            dests
-            and edition.get("edition_id")
-            and edition.get("status") in {"validated", "already_validated"}
-        ):
-            queued = 0
+        if edition.get("edition_id") and edition.get("status") in {
+            "validated",
+            "already_validated",
+        }:
             with session_factory(engine)() as session:
+                dests = destinations(session)
                 row = session.get(Edition, UUID(edition["edition_id"]))
-                if row is not None:
+                if row is not None and dests:
+                    queued = 0
                     for dest in dests:
                         _, created = ensure_delivery(session, row, dest)
                         queued += int(created)

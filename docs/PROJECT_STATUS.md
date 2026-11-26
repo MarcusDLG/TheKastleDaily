@@ -136,7 +136,7 @@ OpenAI generation and NAS deployment remain unqualified.
 | Editorial engine | In progress (selection, evidence drafting with story photo acquisition, OpenAI provider adapter and edition build implemented; model generation exercised in preview runs — adapter bounds reasoning spend and repair-retries malformed output) |
 | EPUB generation and delivery | Implemented (renderer, generated masthead cover, validation, pipeline build and SMTP outbox; live Send-to-Kindle qualified end to end) |
 | Scheduling and observability | Implemented (worker loop and health heartbeat; 30-day retention prunes rows and artifacts each pass) |
-| Web administration | Implemented (dashboard, feed management, editorial tuning on volume-first config) — [WEB_ADMIN.md](WEB_ADMIN.md) |
+| Web administration | Implemented (dashboard, feed management, editorial tuning on volume-first config, recipient management) — [WEB_ADMIN.md](WEB_ADMIN.md) |
 | Cloud deployment | Specced ([CLOUD_DEPLOY.md](CLOUD_DEPLOY.md)) — friend/AWS paths; GHCR image public, DEPLOY.md published, acceptance matrix pending |
 | Secrets management | Implemented — env backend default, AWS Secrets Manager backend ([SECRETS.md](SECRETS.md)) |
 | MCP integration | Planned |

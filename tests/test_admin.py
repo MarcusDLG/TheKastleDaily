@@ -23,6 +23,7 @@ from app.models import (
     Article,
     Base,
     Delivery,
+    DeliveryRecipient,
     Edition,
     EditionStory,
     EditorialRun,
@@ -173,6 +174,67 @@ def test_render_writable_shows_controls(sessions):
     assert "value='disabled'" in html  # state buttons rendered
     assert "w_technology_ai" in html  # weight inputs rendered
     assert "Genre weights" in html
+    assert "Add recipient" in html
+
+
+def test_render_shows_recipients(sessions):
+    with sessions() as session:
+        seed_dashboard(session)
+        session.add(DeliveryRecipient(address="kindle", enabled=True))
+        session.commit()
+        html = render_html(
+            dashboard_data(session), token=TOKEN, writable=True,
+            categories=CATEGORIES, editorial={},
+        )
+    assert "kindle" in html
+    assert "resend latest" in html
+
+
+def test_recipient_lifecycle_and_resend(sessions):
+    server, port = _serve(sessions, password="hunter2")
+    auth = ("admin", "hunter2")
+    try:
+        with sessions() as session:
+            seed_dashboard(session)
+            session.query(Delivery).one().destination_key = "kindle@k.test"
+            session.commit()
+        with pytest.raises(urllib.error.HTTPError) as added:
+            _post(
+                port, "/recipients/add",
+                {"token": TOKEN, "address": "kindle@k.test"}, auth,
+            )
+        assert added.value.code == 303
+        assert added.value.headers["Location"].startswith("/?ok=")
+        with sessions() as session:
+            assert session.query(DeliveryRecipient).one().enabled
+        with pytest.raises(urllib.error.HTTPError) as bad:
+            _post(
+                port, "/recipients/add",
+                {"token": TOKEN, "address": "nope"}, auth,
+            )
+        assert bad.value.code == 303
+        assert "err=" in bad.value.headers["Location"]
+        with pytest.raises(urllib.error.HTTPError) as resent:
+            _post(
+                port, "/deliveries/resend",
+                {"token": TOKEN, "address": "kindle@k.test"}, auth,
+            )
+        assert resent.value.code == 303
+        assert "?ok=" in resent.value.headers["Location"]
+        with sessions() as session:
+            assert session.query(Delivery).one().status == "pending"
+        with pytest.raises(urllib.error.HTTPError) as disabled:
+            _post(
+                port, "/recipients/state",
+                {"token": TOKEN, "address": "kindle@k.test",
+                 "state": "disable"},
+                auth,
+            )
+        assert disabled.value.code == 303
+        with sessions() as session:
+            assert not session.query(DeliveryRecipient).one().enabled
+    finally:
+        server.shutdown()
 
 
 def _serve(sessions, password=None):

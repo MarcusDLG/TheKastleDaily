@@ -36,11 +36,26 @@ result: the message may already be queued at the provider. Automatic
 retries would risk a duplicate library item, so the row waits for a
 manual decision instead.
 
-Message bodies carry the EPUB as `application/epub+zip` with a
-deterministic `Message-ID` (`<delivery-id>@kastle-daily`) recorded on the
-attempt for provider-side reconciliation. Error codes store the SMTP
-status class and exception type only — recipient addresses and server
-banners stay out of logs and diagnostics.
+Message bodies carry the EPUB as `application/epub+zip` with an
+attempt-scoped `Message-ID` (`<delivery-id>.<attempt>@kastle-daily`)
+recorded on the attempt for provider-side reconciliation — resubmits
+never reuse a header downstream relays could deduplicate on. Error
+codes store the SMTP status class and exception type only — recipient
+addresses and server banners stay out of logs and diagnostics.
+
+## Recipients
+
+`delivery_recipients` is the recipient registry — one enabled row per
+Kindle address. `KINDLE_ADDRESS` syncs additively into it on every
+pipeline pass: env entries join automatically, but nothing is ever
+deleted or re-enabled from env, so the admin surface is the single
+path for removal. Each recipient gets an independent
+(edition, destination) outbox row with its own attempt budget.
+
+The admin dashboard's Recipients section adds addresses, toggles
+enabled state, and requeues the newest delivery per address
+("resend latest" flips the row to `pending`; the worker drain picks
+it up on the next wake).
 
 ## Configuration
 
@@ -51,7 +66,7 @@ is a logged no-op and pending rows simply wait.
 |---|---|
 | `SMTP_HOST`, `SMTP_PORT` | Submission endpoint; implicit TLS on 465, STARTTLS otherwise |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Auth and envelope sender — a dedicated account with an app-specific password |
-| `KINDLE_ADDRESS` | The `@kindle.com` receive address(es) — one, or a comma-separated list; each becomes an outbox `destination_key` with its own delivery row |
+| `KINDLE_ADDRESS` | Bootstrap list of `@kindle.com` receive address(es) — one, or comma-separated; additively synced into `delivery_recipients` each pass (removal is admin-owned) |
 
 The sender address must be on each Amazon account's *Approved Personal
 Document E-mail List* before the first live send — every recipient
