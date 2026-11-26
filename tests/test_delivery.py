@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.delivery import drain_outbox, ensure_delivery
+from app.delivery import destinations, drain_outbox, ensure_delivery
 from app.models import Base, Delivery, DeliveryAttempt, Edition
 
 EDITION_DATE = date(2026, 11, 25)
@@ -105,6 +105,38 @@ def attempts(session, delivery_id):
         .where(DeliveryAttempt.delivery_id == delivery_id)
         .order_by(DeliveryAttempt.attempt_number)
     ).all()
+
+
+def test_destinations_parses_comma_separated(monkeypatch):
+    monkeypatch.setenv("KINDLE_ADDRESS", "a@k.test, b@k.test ,, c@k.test ")
+    assert destinations() == ["a@k.test", "b@k.test", "c@k.test"]
+
+
+def test_destinations_empty_when_unset(monkeypatch):
+    monkeypatch.delenv("KINDLE_ADDRESS", raising=False)
+    assert destinations() == []
+
+
+def test_multiple_destinations_each_get_a_delivery(sessions, tmp_path):
+    factory, engine = sessions
+    with factory() as session:
+        edition = seed_edition(session, tmp_path)
+        first, created = ensure_delivery(session, edition, "a@k.test")
+        second, again = ensure_delivery(session, edition, "b@k.test")
+        first.available_at = second.available_at = NOW
+        assert created and again and first.id != second.id
+        session.commit()
+
+    seen = factory_for({})
+    result = drain_outbox(engine, config=CONFIG, factory=seen, now=NOW)
+    assert result["smtp_accepted"] == 2
+    rcpts = [
+        call[1]
+        for client in seen.seen
+        for call in client.calls
+        if call[0] == "rcpt"
+    ]
+    assert sorted(rcpts) == ["a@k.test", "b@k.test"]
 
 
 def test_ensure_delivery_is_idempotent(sessions, tmp_path):

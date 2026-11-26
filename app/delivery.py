@@ -1,4 +1,4 @@
-"""Deliver validated editions to the configured Kindle address over SMTP.
+"""Deliver validated editions to the configured Kindle addresses over SMTP.
 
 The deliveries table is a persistent outbox: one row per edition and
 destination pair carrying the validated EPUB checksum, plus numbered
@@ -52,9 +52,10 @@ def smtp_config() -> dict | None:
     }
 
 
-def destination() -> str | None:
-    """The Kindle receive address, or None when not configured."""
-    return (secret("KINDLE_ADDRESS") or "").strip() or None
+def destinations() -> list[str]:
+    """The Kindle receive addresses — a comma-separated list, or empty."""
+    raw = secret("KINDLE_ADDRESS") or ""
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 def smtp_client(config):
