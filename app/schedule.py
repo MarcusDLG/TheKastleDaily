@@ -26,8 +26,13 @@ POLL_CAP_SECONDS = 900
 MAX_ATTEMPTS_PER_EDITION = 3
 
 
-def edition_config(config_path="config/editorial.yaml"):
-    config = yaml.safe_load(Path(config_path).read_text())
+def edition_config(config_path=None):
+    if config_path is not None:
+        config = yaml.safe_load(Path(config_path).read_text())
+    else:
+        from app.config import load_editorial_config
+
+        config = load_editorial_config()
     zone = ZoneInfo(config["timezone"])
     raw = config.get("edition_time", "07:00")
     hour, minute = (int(part) for part in str(raw).split(":")[:2])

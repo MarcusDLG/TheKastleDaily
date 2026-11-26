@@ -32,9 +32,13 @@ stored photos and every row older than the window, children before
 parents so foreign keys hold — the `sources` feed registry is
 configuration and is never pruned.
 The worker has no listening network service and publishes no ports.
-An optional `admin` compose service (profiles: `admin`) serves a
-read-only operations dashboard; it binds the container's own interface
-and is published on the host loopback only (`127.0.0.1:8080`).
+An optional `admin` compose service (profiles: `admin`) serves the
+operations dashboard — editions, drafting runs, feed health — plus
+authenticated feed management and editorial tuning; it binds the
+container's own interface and publishes `127.0.0.1:8080` in the repo
+compose. Editorial configuration lives volume-first at
+`<db dir>/editorial.yaml`, seeded from the image-baked default, so
+admin edits take effect on the next edition without a rebuild.
 
 ## Database model
 

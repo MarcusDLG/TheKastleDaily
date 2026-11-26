@@ -144,7 +144,7 @@ def test_render_escapes_and_shows(sessions):
         seed_dashboard(session)
         html = render_html(
             dashboard_data(session), token=TOKEN, writable=False,
-            categories=CATEGORIES,
+            categories=CATEGORIES, editorial={},
         )
 
     assert "<script>alert(1)</script>" not in html
@@ -161,10 +161,18 @@ def test_render_writable_shows_controls(sessions):
         html = render_html(
             dashboard_data(session), token=TOKEN, writable=True,
             categories=CATEGORIES,
+            editorial={
+                "target_articles": 15,
+                "edition_time": "07:00",
+                "timezone": "America/New_York",
+                "weights": {"technology_ai": 60, "motorsport": 40},
+            },
         )
     assert "Add feed" in html
     assert TOKEN in html  # form token embedded
     assert "value='disabled'" in html  # state buttons rendered
+    assert "w_technology_ai" in html  # weight inputs rendered
+    assert "Genre weights" in html
 
 
 def _serve(sessions, password=None):
@@ -325,3 +333,65 @@ def test_set_source_state_validation(sessions):
             set_source_state(session, str(source.id), "bogus")
         with pytest.raises(ValueError, match="unknown source"):
             set_source_state(session, str(uuid4()), "approved")
+
+
+def test_editorial_save(sessions, tmp_path, monkeypatch):
+    import yaml
+
+    target = tmp_path / "editorial.yaml"
+    target.write_text(
+        yaml.safe_dump(
+            {
+                "target_articles": 15,
+                "timezone": "America/New_York",
+                "edition_time": "07:00",
+                "weights": {"technology_ai": 60, "motorsport": 40},
+                "social_video_sources": ["youtube"],
+            }
+        )
+    )
+    monkeypatch.setenv("KASTLE_EDITORIAL_CONFIG", str(target))
+    server, port = _serve(sessions, password="hunter2")
+    auth = ("admin", "hunter2")
+    try:
+        with pytest.raises(urllib.error.HTTPError) as saved:
+            _post(
+                port, "/editorial/save",
+                {
+                    "token": TOKEN,
+                    "target_articles": "12",
+                    "edition_time": "06:30",
+                    "timezone": "America/New_York",
+                    "w_technology_ai": "70",
+                    "w_motorsport": "30",
+                    "new_category": "",
+                },
+                auth,
+            )
+        assert saved.value.code == 303
+        saved_config = yaml.safe_load(target.read_text())
+        assert saved_config["edition_time"] == "06:30"
+        assert saved_config["target_articles"] == 12
+        assert saved_config["weights"] == {
+            "technology_ai": 70, "motorsport": 30
+        }
+        assert saved_config["social_video_sources"] == ["youtube"]
+        # Invalid: weights don't sum to 100 → err flash, file unchanged
+        with pytest.raises(urllib.error.HTTPError) as bad:
+            _post(
+                port, "/editorial/save",
+                {
+                    "token": TOKEN,
+                    "target_articles": "12",
+                    "edition_time": "06:30",
+                    "timezone": "America/New_York",
+                    "w_technology_ai": "70",
+                    "w_motorsport": "31",
+                },
+                auth,
+            )
+        assert bad.value.code == 303
+        assert "err=" in bad.value.headers["Location"]
+        assert yaml.safe_load(target.read_text())["weights"]["motorsport"] == 30
+    finally:
+        server.shutdown()

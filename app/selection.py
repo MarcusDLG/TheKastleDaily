@@ -5,11 +5,9 @@ import json
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from pathlib import Path
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-import yaml
 from sqlalchemy import func, select
 
 from app.database import database_engine, session_factory
@@ -143,7 +141,9 @@ def read_candidates(session, cutoff, edition_date):
 
 def build_plan(edition_date=None, engine=None):
     """Compute the selection plan for one edition date (defaults to today)."""
-    config = yaml.safe_load(Path("config/editorial.yaml").read_text())
+    from app.config import load_editorial_config
+
+    config = load_editorial_config()
     zone = ZoneInfo(config["timezone"])
     now = datetime.now(UTC)
     if edition_date is None:
