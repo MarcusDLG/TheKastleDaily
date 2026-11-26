@@ -76,7 +76,7 @@ def run_pipeline() -> None:
 
     from app.build import build_edition, editions_dir, latest_succeeded_run
     from app.database import database_engine, session_factory
-    from app.delivery import destination, drain_safely, ensure_delivery
+    from app.delivery import destinations, drain_safely, ensure_delivery
     from app.drafting import run_drafting
     from app.ingest import ingest_sources
     from app.models import Edition
@@ -108,18 +108,24 @@ def run_pipeline() -> None:
                 edition = build_edition(session, run, editions_dir())
                 session.commit()
         delivery = {"status": "skipped", "reason": "not_applicable"}
-        dest = destination()
+        dests = destinations()
         if (
-            dest is not None
+            dests
             and edition.get("edition_id")
             and edition.get("status") in {"validated", "already_validated"}
         ):
+            queued = 0
             with session_factory(engine)() as session:
                 row = session.get(Edition, UUID(edition["edition_id"]))
                 if row is not None:
-                    _, created = ensure_delivery(session, row, dest)
+                    for dest in dests:
+                        _, created = ensure_delivery(session, row, dest)
+                        queued += int(created)
                     session.commit()
-                    delivery = {"status": "queued" if created else "exists"}
+                    delivery = {
+                        "status": "queued" if queued else "exists",
+                        "destinations": len(dests),
+                    }
         outbox = drain_safely(engine)
         with session_factory(engine)() as session:
             retention = prune(session, editions_dir())

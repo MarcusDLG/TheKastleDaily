@@ -49,7 +49,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USERNAME=your-sender@gmail.com
 SMTP_PASSWORD=your-app-password
-KINDLE_ADDRESS=you@kindle.com
+KINDLE_ADDRESS=you@kindle.com      # or a comma-separated list for several Kindles
 
 # Drafting model — leave empty to fall back to the local template.
 OPENAI_API_KEY=sk-...

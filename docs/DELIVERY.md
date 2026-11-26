@@ -51,10 +51,11 @@ is a logged no-op and pending rows simply wait.
 |---|---|
 | `SMTP_HOST`, `SMTP_PORT` | Submission endpoint; implicit TLS on 465, STARTTLS otherwise |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Auth and envelope sender — a dedicated account with an app-specific password |
-| `KINDLE_ADDRESS` | The `@kindle.com` receive address; becomes the outbox `destination_key` |
+| `KINDLE_ADDRESS` | The `@kindle.com` receive address(es) — one, or a comma-separated list; each becomes an outbox `destination_key` with its own delivery row |
 
-The sender address must be on the Amazon account's *Approved Personal
-Document E-mail List* before the first live send. `smtp_accepted` proves
+The sender address must be on each Amazon account's *Approved Personal
+Document E-mail List* before the first live send — every recipient
+account maintains its own list. `smtp_accepted` proves
 provider submission only; Kindle library sync and device receipt are
 separate acceptance evidence, and Amazon applies its own conversion and
 attachment limits (~50 MB — editions run a few MB).
