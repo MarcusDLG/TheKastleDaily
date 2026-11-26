@@ -137,8 +137,8 @@ OpenAI generation and NAS deployment remain unqualified.
 | EPUB generation and delivery | Implemented (renderer, generated masthead cover, validation, pipeline build and SMTP outbox; live Send-to-Kindle qualified end to end) |
 | Scheduling and observability | Implemented (worker loop and health heartbeat; 30-day retention prunes rows and artifacts each pass) |
 | Web administration | Implemented (dashboard, feed management, editorial tuning on volume-first config) — [WEB_ADMIN.md](WEB_ADMIN.md) |
-| Cloud deployment | Specced ([CLOUD_DEPLOY.md](CLOUD_DEPLOY.md)) — friend/AWS paths; gated on GHCR publication (M00-GOV-003) |
-| Secrets management | Specced ([SECRETS.md](SECRETS.md)) — pluggable backend chain: env default, AWS Secrets Manager |
+| Cloud deployment | Specced ([CLOUD_DEPLOY.md](CLOUD_DEPLOY.md)) — friend/AWS paths; GHCR image public, DEPLOY.md published, acceptance matrix pending |
+| Secrets management | Implemented — env backend default, AWS Secrets Manager backend ([SECRETS.md](SECRETS.md)) |
 | MCP integration | Planned |
 | NAS deployment and recovery | Deployed (worker live on DS220+, first unattended edition delivered); backup/DR pending POST-MVP-001 |
 
