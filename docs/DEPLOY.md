@@ -31,6 +31,8 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
       OPENAI_MAX_COST_USD: ${OPENAI_MAX_COST_USD:-0.50}
+      SECRETS_BACKEND: ${SECRETS_BACKEND:-env}
+      SECRETS_PREFIX: ${SECRETS_PREFIX:-kastle-daily/}
     restart: unless-stopped
 volumes:
   kastle-data: {}
@@ -105,6 +107,32 @@ docker compose pull && docker compose up -d
 All state lives in the `kastle-data` volume (`/data/kastle.db` plus
 `editions/`); the image carries no state. 30-day retention prunes old
 rows and artifacts automatically on every run.
+
+## Optional: AWS Secrets Manager
+
+On an AWS host you can keep the app secrets out of the `.env` file
+entirely — only an AWS credential lives on the box.
+
+1. Create one secret per name in Secrets Manager (type **Other →
+   Plaintext**, the raw value — not the key/value JSON editor):
+
+   | Secret name | Value |
+   |---|---|
+   | `kastle-daily/SMTP_PASSWORD` | your app password |
+   | `kastle-daily/KINDLE_ADDRESS` | you@kindle.com |
+   | `kastle-daily/OPENAI_API_KEY` | sk-... |
+
+2. Give the host read access. On **EC2/Fargate**: attach an IAM
+   role with `secretsmanager:GetSecretValue` on
+   `arn:aws:secretsmanager:*:<acct>:secret:kastle-daily/*` — boto3
+   picks it up automatically. On **Lightsail** (no instance roles):
+   create a scoped-down IAM user, and put its credentials in `.env`
+   as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` — the worker env
+   passes them through, so add those lines to the compose
+   `environment:` block too.
+
+3. In `.env`: `SECRETS_BACKEND=aws` and drop the three secrets. Env
+   values still win when both are set, so you can override per-host.
 
 ## Cheaper shapes
 
